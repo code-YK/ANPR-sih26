@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environments
+venv/
+env/
+.env/
+.venv/
+env.bak/
+venv.bak/
+
+# YOLO & Models
+*.pt
+*.onnx
+*.engine
+*.torchscript
+
+# Videos & Output
+*.mp4
+*.avi
+*.mkv
+*.mov
+*output.mp4
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

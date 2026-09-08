@@ -1,0 +1,26 @@
+# IMPORTANT: install PyTorch from the CUDA index FIRST, before this file.
+# A plain `pip install torch` on Windows silently installs a CPU-only wheel,
+# which runs ~15x slower with no error message.
+#
+#   pip install --index-url https://download.pytorch.org/whl/cu128 torch torchvision
+#
+# cu128 or newer is required for RTX 50-series (Blackwell, sm_120).
+# Verify with:  python -c "import torch; print(torch.cuda.is_available())"
+
+ultralytics>=8.4.63
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# --- number plate recognition (optional, for --plates) -------------------
+# fast-alpr pulls in opencv-python-headless, which SHADOWS opencv-python and
+# silently breaks cv2.imshow. After installing, restore the GUI build:
+#   pip install fast-alpr
+#   pip uninstall -y opencv-python-headless
+#   pip install --force-reinstall --no-deps opencv-python
+#
+# onnxruntime-gpu must match torch's CUDA major version or it falls back to
+# CPU with only a log line to show for it (~90ms/crop instead of ~2ms).
+# torch cu128 ships CUDA 12, so pin the CUDA 12 build:
+#   pip install onnxruntime-gpu==1.22.0
+fast-alpr>=0.4.0
+onnxruntime-gpu==1.22.0

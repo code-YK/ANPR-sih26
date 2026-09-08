@@ -1,0 +1,91 @@
+# TrackTrack, tuned for crowded street CCTV.
+#
+# Chosen by measurement on ahmedabad.mp4 (201 frames), not by reputation. The
+# raw "unique ID count" that most comparisons quote is misleading here, because
+# a tracker can score well simply by refusing to track marginal detections. All
+# numbers below are therefore reported at MATCHED RECALL (people or vehicles
+# tracked per frame), which is the only way to compare association quality.
+#
+#   PERSON            people/frame   unique IDs   IDs per person-slot
+#     bytetrack             8.88         104            11.7
+#     botsort               9.16          70             7.6
+#     botsort buf90         9.21          65             7.1
+#     this config, no ReID  9.15          57             6.2
+#     this config + ReID s  9.24          44             4.8   <-- best
+#
+#   VEHICLE          vehicles/frame   unique IDs   IDs per slot
+#     bytetrack             5.37          47             8.8
+#     botsort               5.40          44             8.1
+#     this config           5.17          29             5.6   <-- best
+#
+# Stock tracktrack.yaml scores a headline 39 IDs for person, but only by
+# tracking 5.57 people/frame instead of 8.88 - it silently drops a third of the
+# people. The threshold changes below restore that recall; the gain that
+# survives is real but modest (~12% for person, ~36% for vehicle over botsort),
+# not the 3x the raw count suggests.
+#
+# ReID was tested and is deliberately OFF - see the note at the bottom.
+
+tracker_type: tracktrack
+
+# Detection thresholds lowered from the 0.6/0.7 defaults to match ByteTrack's
+# recall. The stock values are tuned for MOT benchmark footage with large,
+# clean subjects; on distant CCTV targets they discard real people.
+track_high_thresh: 0.25 # (float) High-confidence detection threshold
+track_low_thresh: 0.25 # (float) Low-confidence threshold for the second stage
+new_track_thresh: 0.25 # (float) Minimum score to start a track via TAI
+
+track_buffer: 90 # (int) Frames a lost track stays alive (~3s at 30fps)
+match_thresh: 0.7 # (float) Initial matching threshold for iterative assignment
+
+# The single most useful knob found. Enables a relaxed second pass that rebinds
+# still-Lost tracks, which is what actually recovers identities after occlusion.
+# Raising track_buffer alone did nothing (39 -> 39 IDs); adding this took it to
+# 34. Occlusion recovery was gated by the match cost, not by the buffer length.
+lost_match_thr: 0.9 # (float) Looser rebind gate for Lost tracks; 0 disables
+
+# Association weights
+iou_weight: 0.5 # (float) Weight for HMIoU distance
+reid_weight: 0.5 # (float) Cosine distance, or HMIoU fallback when ReID is off
+conf_weight: 0.1 # (float) Weight for confidence distance
+angle_weight: 0.05 # (float) Weight for corner angle distance
+
+# Iterative assignment
+penalty_p: 0.2 # (float) Cost penalty for low-confidence detections
+penalty_q: 0.4 # (float) Cost penalty for deleted/recovered detections
+reduce_step: 0.05 # (float) Threshold reduction per iteration
+
+# Track-Aware Initialization
+tai_thr: 0.55 # (float) IoU threshold for TAI NMS suppression
+min_track_len: 3 # (int) Minimum history before a track is confirmed
+
+# Global motion compensation: OFF -- same reasoning and same measurement as
+# trackers/fast.yaml (see its note). GMC corrects for camera movement; fixed
+# CCTV has none, and on this footage it cost ~39ms/frame (about half of total
+# inference time) while producing an identical set of track IDs at identical
+# recall. Turn it back on only for a source that actually moves during
+# capture (handheld, or a PTZ mid-pan rather than parked).
+gmc_method: none
+
+# ReID: ON, and the model size was chosen by measurement, not by "bigger is
+# better". Person class, 201 frames, all at matched recall:
+#
+#     model    people/frame   IDs   IDs/slot    time
+#     none          9.15       57      6.2      21.8s
+#     yolo26n       9.10       49      5.4      39.9s
+#     yolo26s       9.24       44      4.8      30.0s   <-- chosen
+#     yolo26m       9.31       44      4.7      72.2s
+#     yolo26x       9.21       46      5.0     104.3s
+#
+# yolo26x is both SLOWER (3.5x) and slightly WORSE than yolo26s. Larger ReID
+# backbones are trained for high-resolution crops; on small CCTV subjects the
+# extra capacity fits noise rather than identity. yolo26m matches s on quality
+# but costs 2.4x the time, so s is the efficient frontier.
+#
+# An earlier test appeared to show ReID adding nothing - that was measured
+# against stock tracktrack, which scores well only by suppressing a third of
+# the detections. Against a baseline at full recall, ReID removes ~23% of the
+# remaining ID switches. Worth re-checking per deployment, but on this footage
+# it earns its 38% time cost.
+with_reid: True
+model: yolo26s-reid.onnx
