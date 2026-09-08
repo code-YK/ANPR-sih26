@@ -1,0 +1,191 @@
+.app-loading, .auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: min(440px, 100%);
+  padding: 32px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--depth-2);
+}
+
+/* Same lockup as the rail, one step larger: on the sign-in card the mark
+   is introducing the product rather than orienting someone already in it. */
+.auth-brand {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--font-display); font-size: 19px; font-weight: 700;
+  letter-spacing: -0.015em; color: var(--haze-100);
+}
+.auth-brand > span { display: block; line-height: 1.1; }
+.auth-card h1 { margin: 20px 0 8px; }
+.auth-card .field { margin: 16px 0; }
+.auth-card label { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; font-weight: 650; }
+/* Metrics live in the shared control rule in style.css; only the
+   full-width behaviour of a stacked auth/admin form is specific here. */
+.auth-card input, .auth-card select, .admin-view input, .admin-view select { width: 100%; }
+/* A toolbar lays its controls out in one row. The full-width rule above is
+   right for stacked form fields but wrong here: it made the "New department"
+   input consume the entire flex line, wrapping the Create button onto a row
+   of its own instead of sitting beside the field it submits. */
+.admin-view .toolbar input, .admin-view .toolbar select { width: auto; }
+.password-field { position: relative; }
+.password-field input { padding-right: 52px; }
+.password-toggle {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  font-size: 12px; font-weight: 600;
+}
+.auth-message { padding: 10px; border-radius: 6px; background: var(--accent-bg); font-size: 13px; }
+.auth-submit { width: 100%; margin-top: 8px; padding-block: 10px !important; }
+.auth-switch { width: 100%; margin-top: 18px; }
+
+/* No layout here on purpose. This block used to carry `margin-left: auto`
+   and `text-align: right` from the old top-bar header, where the session
+   block sat at the far right. In the vertical rail that margin still
+   applied and shoved the whole block (and the Sign out button with it) off
+   to the right edge. Each context now owns its own layout: the rail below
+   in style.css, the collapsed top bar in the media query at the foot of
+   this file. */
+.session-summary small, td small, .grant-row small { color: var(--muted); }
+
+.admin-heading, .admin-user-title { display: flex; gap: 10px; align-items: center; }
+.admin-heading { justify-content: space-between; }
+.admin-heading h2 { margin-bottom: 4px; }
+/* Section headings were 14px -- the same size as body text, which is the
+   whole reason they read as having no presence. They take the h2 step now. */
+.admin-view h3 { margin: 28px 0 12px; font-size: var(--fs-title); letter-spacing: var(--track-title); }
+/* align-items:start so a short card (a super admin, who holds no
+   per-department grants) stops stretching to match the tallest in its row
+   and sitting mostly empty. 380px, not 340: the add-grant row is two
+   selects plus a button and was cramped at the old minimum. */
+.admin-user-list {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 12px; align-items: start;
+}
+.admin-user-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 14px; box-shadow: var(--depth-1); }
+.admin-user-title { justify-content: space-between; }
+/* The card's three bands -- identity, existing access, grant-another -- were
+   running together with no separation, so the grant rows and the add-a-grant
+   row read as one undifferentiated block of dropdowns. Each band is now
+   ruled off and labelled. */
+.admin-user-card { display: grid; gap: 0; padding: 0; overflow: hidden; }
+.admin-user-title {
+  padding: 14px; border-bottom: 1px solid var(--border);
+  justify-content: space-between; align-items: flex-start;
+}
+.admin-user-ident { display: grid; gap: 2px; min-width: 0; }
+.admin-user-ident strong { font-size: 14px; }
+.admin-user-ident small { overflow-wrap: anywhere; }
+/* The label face rather than a grey pill: role is the most consequential
+   fact about an account, and colour can't mark it (colour means urgency). */
+.admin-user-role {
+  font-family: var(--font-display); font-size: var(--fs-label); font-weight: 600;
+  text-transform: uppercase; letter-spacing: var(--track-label); color: var(--haze-400);
+}
+.admin-user-state { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+/* A disabled account should be visibly inert in a scan of the list, not
+   distinguishable only by reading its button's label. */
+.admin-user-card-off { opacity: 0.62; }
+
+.grant-block, .grant-add { padding: 12px 14px; }
+.grant-add { border-top: 1px solid var(--border); }
+.grant-heading { margin: 0 0 8px; }
+.grant-empty { margin: 0; }
+
+/* One grid for the whole list (rows use display:contents) so the clearance
+   selects line up down the card instead of each landing wherever its own
+   department name happened to end. */
+.grant-list { display: grid; grid-template-columns: 1fr auto auto; gap: 8px 10px; align-items: center; }
+.grant-row { display: contents; }
+/* A step below the account name (14px): within a card the person is the
+   subject and their departments are attributes of them, so the two
+   shouldn't read at equal weight. */
+.grant-dept { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 13px; }
+.grant-home {
+  font-family: var(--font-display); font-size: 9.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--haze-400);
+  border: 1px solid var(--ink-600); border-radius: 3px; padding: 0 4px; flex: 0 0 auto;
+}
+.grant-row select, .grant-add select { width: auto; min-width: 100px; }
+.grant-add-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+.audit-pager { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.audit-pager .hint { margin: 0; font-variant-numeric: tabular-nums; }
+.row-actions { white-space: nowrap; }
+.row-actions button + button { margin-left: 10px; }
+.link-btn.danger { color: var(--bad); }
+.table-scroll { overflow-x: auto; }
+
+/* Department directory: a list of <details> cards, not a table with a
+   toggled second row -- <details> can't validly wrap <tr> elements, and
+   this reads better as a list at a handful-of-departments scale anyway. */
+.department-list { display: grid; gap: 8px; margin-bottom: 20px; }
+.department-card {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 14px; box-shadow: var(--depth-1);
+}
+/* display:flex (for the name/counts split) suppresses a <summary>'s native
+   marker -- markers only render on list-item display -- so the triangle is
+   redrawn by hand instead of lost outright. */
+.department-card summary {
+  display: flex; align-items: center; gap: 10px;
+  cursor: pointer; user-select: none; list-style: none;
+}
+.department-card summary::-webkit-details-marker { display: none; }
+.department-card summary::before {
+  content: "▸"; color: var(--haze-400); font-size: 11px; flex: 0 0 auto;
+  transition: transform 0.12s;
+}
+.department-card[open] summary::before { transform: rotate(90deg); }
+.department-card summary strong { flex: 0 0 auto; }
+.department-card-counts { margin-left: auto; }
+.department-card[open] summary { margin-bottom: 10px; }
+.department-card-counts { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.department-members-table { box-shadow: none; border-radius: 0; background: transparent; }
+.department-members-table th { background: transparent; }
+
+.admin-source-form {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  padding: 14px; margin-top: 12px; display: grid; gap: 10px;
+}
+.admin-source-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.admin-source-checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.admin-source-checkbox input { width: auto; }
+
+/* Below 900px the rail collapses to a top bar (DESIGN.md §6.4): the console
+   is a desk product, so narrow screens must stay usable, not optimal. The
+   rail's own sticky/full-height rules have to be unwound explicitly here,
+   or a horizontal bar inherits max-height:100vh and its own scroller. */
+@media (max-width: 900px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas: "rail" "main" "status";
+  }
+  .app-rail {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    position: static;
+    height: auto;
+    overflow: visible;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .app-rail h1 { margin-bottom: 0; }
+  .app-rail h1 .sub { display: none; }
+  .app-rail nav { flex-direction: row; order: 3; width: 100%; overflow-x: auto; }
+  .app-rail nav .nav-btn { width: auto; }
+  .app-rail .nav-count-badge { margin-left: 0; }
+  .app-rail .session-summary {
+    margin-top: 0; margin-left: auto; display: flex; align-items: center; gap: 12px;
+    padding-top: 0; border-top: none;
+  }
+  .app-rail .session-summary span { text-align: right; padding: 0; }
+  .app-rail .session-summary button { width: auto; }
+}
