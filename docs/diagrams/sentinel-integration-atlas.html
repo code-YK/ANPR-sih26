@@ -1,0 +1,763 @@
+<title>Sentinel Integration Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+/* ---------------------------------------------------------------
+   Tokens lifted from the operator console's own system (DESIGN.md §4).
+   One hue, one saturation, lightness varying — the whole neutral ramp
+   is generated from two variables. Four urgency hues, nothing else.
+   The console is a single dark instrument surface by decision, not by
+   omission, so every colour here is painted explicitly.
+   --------------------------------------------------------------- */
+:root {
+  --ground-h: 158;
+  --ground-s: 8%;
+
+  --ink-900:  hsl(var(--ground-h) var(--ground-s) 6%);
+  --ink-850:  hsl(var(--ground-h) var(--ground-s) 8%);
+  --ink-800:  hsl(var(--ground-h) var(--ground-s) 10%);
+  --ink-700:  hsl(var(--ground-h) var(--ground-s) 13%);
+  --ink-600:  hsl(var(--ground-h) var(--ground-s) 19%);
+
+  --haze-400: hsl(var(--ground-h) var(--ground-s) 51%);
+  --haze-300: hsl(var(--ground-h) var(--ground-s) 67%);
+  --haze-100: hsl(var(--ground-h) var(--ground-s) 88%);
+
+  --nominal:  hsl(158 43% 56%);
+  --degraded: hsl(36  72% 57%);
+  --critical: hsl(4   75% 60%);
+  --entity:   hsl(207 49% 71%);
+
+  --sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --s1: 0.5rem;  --s2: 0.75rem; --s3: 1rem;    --s4: 1.5rem;
+  --s5: 2.25rem; --s6: 3.5rem;  --s7: 5.5rem;
+  --measure: 66ch;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+/* let flex children shrink so .canvas scrolls internally instead of widening the page */
+.wrap > *, section > *, figure > * { min-width: 0; }
+
+body {
+  margin: 0;
+  background: var(--ink-900);
+  color: var(--haze-100);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--s6) var(--s4) var(--s7);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s7);
+}
+
+/* --- type ------------------------------------------------------ */
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--haze-400);
+  margin: 0;
+}
+h1 {
+  font-size: clamp(2.25rem, 6vw, 3.5rem);
+  font-weight: 600;
+  line-height: 1.02;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+  margin: var(--s3) 0 0;
+  color: var(--haze-100);
+}
+h2 {
+  font-size: clamp(1.375rem, 3vw, 1.75rem);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  text-wrap: balance;
+  margin: 0;
+}
+h3 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  margin: 0;
+}
+p { margin: 0; max-width: var(--measure); }
+.lede { font-size: 1.0625rem; color: var(--haze-300); }
+.note { font-size: 0.875rem; color: var(--haze-400); }
+strong { font-weight: 600; color: var(--haze-100); }
+code, .m { font-family: var(--mono); font-size: 0.86em; color: var(--haze-300); }
+
+/* --- header ---------------------------------------------------- */
+header { display: flex; flex-direction: column; gap: var(--s4); }
+.header-rule { height: 1px; background: var(--ink-600); }
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  border-block: 1px solid var(--ink-600);
+}
+.fact {
+  padding: var(--s3);
+  border-left: 1px solid var(--ink-600);
+}
+.fact:first-child { border-left: 0; padding-left: 0; }
+.fact dt {
+  font-family: var(--mono); font-size: 0.625rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--haze-400); margin: 0 0 0.375rem;
+}
+.fact dd {
+  margin: 0; font-family: var(--mono); font-size: 1.375rem; font-weight: 500;
+  color: var(--haze-100); font-variant-numeric: tabular-nums; line-height: 1.1;
+}
+.fact dd span { font-size: 0.8125rem; color: var(--haze-400); letter-spacing: 0.02em; }
+
+/* --- sections -------------------------------------------------- */
+section { display: flex; flex-direction: column; gap: var(--s4); }
+.sec-head { display: flex; flex-direction: column; gap: var(--s2); }
+.sec-head .eyebrow { display: flex; align-items: center; gap: var(--s2); }
+.sec-head .eyebrow::after { content: ""; flex: 1; height: 1px; background: var(--ink-600); }
+
+/* --- figures --------------------------------------------------- */
+figure { margin: 0; display: flex; flex-direction: column; gap: var(--s3); }
+.canvas {
+  background: var(--ink-900);
+  border: 1px solid var(--ink-600);
+  padding: var(--s3);
+  overflow-x: auto;
+}
+.canvas svg { display: block; width: 100%; height: auto; min-width: 720px; }
+/* keep every figure at the same optical text size rather than upscaling a narrow one */
+.canvas--narrow svg { max-width: 740px; margin-inline: auto; }
+figcaption {
+  font-size: 0.875rem; color: var(--haze-400); max-width: var(--measure);
+  padding-left: var(--s3); border-left: 2px solid var(--ink-600);
+}
+figcaption b { color: var(--haze-300); font-weight: 500; }
+
+/* --- SVG vocabulary -------------------------------------------- */
+.band      { fill: var(--ink-850); }
+.band-rule { stroke: var(--ink-600); stroke-width: 1; }
+.zlab {
+  fill: var(--haze-400); font-family: var(--mono); font-size: 10.5px;
+  font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;
+}
+
+.n         { fill: var(--ink-700); stroke: var(--ink-600); stroke-width: 1; }
+.n-prop    { fill: none; stroke: var(--ink-600); stroke-width: 1; stroke-dasharray: 5 4; }
+.n-flat    { fill: var(--ink-800); stroke: var(--ink-600); stroke-width: 1; }
+
+.nt  { fill: var(--haze-100); font-family: var(--sans); font-size: 13.5px; font-weight: 500; }
+.nt-sm { fill: var(--haze-100); font-family: var(--sans); font-size: 12px; font-weight: 500; }
+.ns  { fill: var(--haze-400); font-family: var(--mono); font-size: 10px; }
+.ns-dim { fill: var(--haze-400); font-family: var(--mono); font-size: 10px; opacity: 0.75; }
+.chip {
+  fill: var(--haze-400); font-family: var(--mono); font-size: 9px;
+  font-weight: 500; letter-spacing: 0.12em;
+}
+
+.e       { fill: none; stroke: var(--haze-400); stroke-width: 1.4; }
+.e-thin  { fill: none; stroke: var(--haze-400); stroke-width: 1; opacity: 0.8; }
+.e-vid   { fill: none; stroke: var(--nominal); stroke-width: 1.6; }
+.e-obs   { fill: none; stroke: var(--entity);  stroke-width: 1.6; }
+.e-alert { fill: none; stroke: var(--critical); stroke-width: 1.8; }
+.e-prop  { fill: none; stroke: var(--haze-400); stroke-width: 1.4;
+           stroke-dasharray: 5 4; opacity: 0.65; }
+
+.el  { fill: var(--haze-300); font-family: var(--mono); font-size: 10px; }
+.el-vid   { fill: var(--nominal);  font-family: var(--mono); font-size: 10px; }
+.el-obs   { fill: var(--entity);   font-family: var(--mono); font-size: 10px; }
+.el-alert { fill: var(--critical); font-family: var(--mono); font-size: 10px; }
+.el-dim   { fill: var(--haze-400); font-family: var(--mono); font-size: 10px; opacity: 0.8; }
+
+.mk       { fill: var(--haze-400); }
+.mk-vid   { fill: var(--nominal); }
+.mk-obs   { fill: var(--entity); }
+.mk-alert { fill: var(--critical); }
+.mk-dim   { fill: var(--haze-400); opacity: 0.65; }
+
+/* --- legend ---------------------------------------------------- */
+.legend { display: flex; flex-direction: column; gap: var(--s3); }
+.legend .key { flex-direction: row; flex-wrap: wrap; column-gap: var(--s5); row-gap: var(--s2); }
+.legend .key li { grid-template-columns: 58px auto; }
+.legend-col { display: flex; flex-direction: column; gap: var(--s2); }
+.legend-col h3 { color: var(--haze-100); }
+.legend-col p { font-size: 0.8125rem; color: var(--haze-400); }
+.key { display: flex; flex-direction: column; gap: 0.625rem; margin: 0; padding: 0; list-style: none; }
+.key li { display: grid; grid-template-columns: 58px 1fr; gap: var(--s2); align-items: center; font-size: 0.8125rem; color: var(--haze-300); }
+.key svg { display: block; width: 58px; height: 18px; }
+.key b { font-family: var(--mono); font-size: 0.75rem; font-weight: 500; color: var(--haze-100); }
+.key span { color: var(--haze-400); }
+
+/* --- closing --------------------------------------------------- */
+.ledger { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1px; background: var(--ink-600); border: 1px solid var(--ink-600); }
+.ledger div { background: var(--ink-850); padding: var(--s3); display: flex; flex-direction: column; gap: 0.375rem; }
+.ledger dt { font-family: var(--mono); font-size: 0.625rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--haze-400); }
+.ledger dd { margin: 0; font-size: 0.8125rem; color: var(--haze-300); }
+
+footer { border-top: 1px solid var(--ink-600); padding-top: var(--s4); }
+
+@media (max-width: 640px) {
+  .wrap { padding: var(--s5) var(--s3) var(--s6); gap: var(--s6); }
+  .fact { border-left: 0; padding-inline: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+:where(a):focus-visible { outline: 2px solid var(--entity); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Sentinel &middot; Gujarat Police Innovation Hackathon 2026</p>
+  <h1>Sentinel Integration Atlas</h1>
+  <p class="lede">Four drawings of one mechanism: how a frame inside a department&rsquo;s
+  own camera network becomes an auditable alert on an operator&rsquo;s screen &mdash;
+  and which trust boundary it crosses to get there.</p>
+  <div class="header-rule"></div>
+  <dl class="facts">
+    <div class="fact"><dt>Sandbox</dt><dd>~50 <span>cameras</span></dd></div>
+    <div class="fact"><dt>Statewide target</dt><dd>~80,000 <span>cameras</span></dd></div>
+    <div class="fact"><dt>Integration rungs</dt><dd>6 <span>one contract</span></dd></div>
+    <div class="fact"><dt>Trust zones</dt><dd>5 <span>outbound only</span></dd></div>
+    <div class="fact"><dt>Estate</dt><dd>26 <span>departments</span></dd></div>
+  </dl>
+</header>
+
+<section id="notation">
+  <div class="sec-head">
+    <p class="eyebrow">Notation</p>
+    <h2>Colour is spent only on what actually moves</h2>
+    <p class="note">Four hues, total &mdash; borrowed from the operator console&rsquo;s own rule
+    that colour is load-bearing for urgency and is therefore reserved for nothing else. Three
+    of them name the payloads that travel the system; the fourth is everything else.</p>
+  </div>
+  <div class="legend">
+
+    <div class="legend-col">
+      <ul class="key">
+        <li>
+          <svg viewBox="0 0 58 18" role="img" aria-label="Green line">
+            <line x1="2" y1="9" x2="56" y2="9" class="e-vid"/>
+          </svg>
+          <span><b>Live video</b> &middot; <span>never reaches the browser raw</span></span>
+        </li>
+        <li>
+          <svg viewBox="0 0 58 18" role="img" aria-label="Blue line">
+            <line x1="2" y1="9" x2="56" y2="9" class="e-obs"/>
+          </svg>
+          <span><b>Observations</b> &middot; <span>plates, tracks, evidence</span></span>
+        </li>
+        <li>
+          <svg viewBox="0 0 58 18" role="img" aria-label="Red line">
+            <line x1="2" y1="9" x2="56" y2="9" class="e-alert"/>
+          </svg>
+          <span><b>Alerts</b> &middot; <span>a person must act</span></span>
+        </li>
+        <li>
+          <svg viewBox="0 0 58 18" role="img" aria-label="Grey line">
+            <line x1="2" y1="9" x2="56" y2="9" class="e"/>
+          </svg>
+          <span><b>Control</b> &middot; <span>metadata, config, audit</span></span>
+        </li>
+      </ul>
+    </div>
+
+  </div>
+</section>
+
+<section id="path">
+  <div class="sec-head">
+    <p class="eyebrow">01 &middot; The whole path</p>
+    <h2>A frame crosses five trust boundaries to become an alert</h2>
+    <p class="note">Read top to bottom. The department estate is never dialled into and never
+    reconfigured; Sentinel is a stream consumer with the privileges of any authorised viewer.
+    An operator&rsquo;s browser has no route back to Zone&nbsp;1 at all.</p>
+  </div>
+
+  <figure>
+  <div class="canvas">
+  <svg viewBox="0 0 1000 1580" role="img"
+       aria-label="End-to-end flow from department cameras through the connector boundary, media and analytics workers, regional transport, the central control plane, and out to the operator console, drawn in five horizontal trust-zone bands.">
+
+    <defs>
+      <marker id="a" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" class="mk"/></marker>
+      <marker id="av" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" class="mk-vid"/></marker>
+      <marker id="ao" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" class="mk-obs"/></marker>
+      <marker id="ac" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" class="mk-alert"/></marker>
+      <marker id="ad" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" class="mk-dim"/></marker>
+    </defs>
+
+    <!-- ================= zone bands ================= -->
+    <rect class="band" x="24" y="56"   width="930" height="200"/>
+    <rect class="band" x="24" y="300"  width="930" height="372"/>
+    <rect class="band" x="24" y="700"  width="930" height="150"/>
+    <rect class="band" x="24" y="876"  width="930" height="380"/>
+    <rect class="band" x="24" y="1336" width="930" height="196"/>
+    <line class="band-rule" x1="24" y1="56"   x2="954" y2="56"/>
+    <line class="band-rule" x1="24" y1="300"  x2="954" y2="300"/>
+    <line class="band-rule" x1="24" y1="700"  x2="954" y2="700"/>
+    <line class="band-rule" x1="24" y1="876"  x2="954" y2="876"/>
+    <line class="band-rule" x1="24" y1="1336" x2="954" y2="1336"/>
+
+    <text class="zlab" x="938" y="78" text-anchor="end">Zone 1 &#183; Department camera &amp; media network &#8212; unchanged, read-only</text>
+    <text class="zlab" x="938" y="322" text-anchor="end">Zone 2 &#183; Edge processing &#8212; department or regional</text>
+    <text class="zlab" x="938" y="722" text-anchor="end">Zone 3 &#183; Regional transport</text>
+    <text class="zlab" x="938" y="896" text-anchor="end">Zone 4 &#183; Central control plane</text>
+    <text class="zlab" x="938" y="1522" text-anchor="end">Zone 5 &#183; Operator network</text>
+
+    <!-- ================= ZONE 1 — the six rungs ================= -->
+    <rect class="n" x="48"  y="104" width="135" height="112"/>
+    <text class="chip"  x="62"  y="128">RUNG 5</text>
+    <text class="nt-sm" x="62"  y="154">IP camera</text>
+    <text class="nt-sm" x="62"  y="170">or NVR</text>
+    <text class="ns"    x="62"  y="194">ONVIF S/T</text>
+
+    <rect class="n" x="197" y="104" width="135" height="112"/>
+    <text class="chip"  x="211" y="128">RUNG 4</text>
+    <text class="nt-sm" x="211" y="154">RTSP only</text>
+    <text class="nt-sm" x="211" y="170">no ONVIF</text>
+    <text class="ns"    x="211" y="194">endpoint intake</text>
+
+    <rect class="n" x="346" y="104" width="135" height="112"/>
+    <text class="chip"  x="360" y="128">RUNG 3</text>
+    <text class="nt-sm" x="360" y="154">Department</text>
+    <text class="nt-sm" x="360" y="170">catalogue</text>
+    <text class="ns"    x="360" y="194">read-only API</text>
+
+    <rect class="n-prop" x="495" y="104" width="135" height="112"/>
+    <text class="chip"  x="509" y="128">RUNG 2</text>
+    <text class="nt-sm" x="509" y="154">Vendor VMS</text>
+    <text class="nt-sm" x="509" y="170">SDK bridge</text>
+    <text class="ns-dim" x="509" y="194">one per vendor</text>
+
+    <rect class="n" x="644" y="104" width="135" height="112"/>
+    <text class="chip"  x="658" y="128">RUNG 1</text>
+    <text class="nt-sm" x="658" y="154">Analog +</text>
+    <text class="nt-sm" x="658" y="170">DVR encoder</text>
+    <text class="ns"    x="658" y="194">existing output</text>
+
+    <rect class="n" x="793" y="104" width="135" height="112"/>
+    <text class="chip"  x="807" y="128">RUNG 0</text>
+    <text class="nt-sm" x="807" y="154">No reachable</text>
+    <text class="nt-sm" x="807" y="170">feed</text>
+    <text class="ns"    x="807" y="194">endpoints null</text>
+
+    <!-- manifold: five stream-bearing rungs merge into one boundary -->
+    <line class="e-vid" x1="115.5" y1="216" x2="115.5" y2="278"/>
+    <line class="e-vid" x1="264.5" y1="216" x2="264.5" y2="278"/>
+    <line class="e-vid" x1="413.5" y1="216" x2="413.5" y2="278"/>
+    <line class="e-vid" x1="562.5" y1="216" x2="562.5" y2="278"/>
+    <line class="e-vid" x1="711.5" y1="216" x2="711.5" y2="278"/>
+    <line class="e-vid" x1="115.5" y1="278" x2="711.5" y2="278"/>
+    <line class="e-vid" x1="413.5" y1="278" x2="413.5" y2="346" marker-end="url(#av)"/>
+    <text class="el-vid" x="428" y="338">read-only pull &#183; RTSP / ONVIF / SDK / catalogue fetch</text>
+
+    <!-- rung 0 bypasses the media plane entirely -->
+    <path class="e" d="M860.5,216 L860.5,240 L972,240 L972,910 L756,910 L756,922" marker-end="url(#a)"/>
+    <text class="el-dim" x="966" y="580" transform="rotate(-90 966 580)">registry only &#8212; no media path</text>
+
+    <!-- ================= ZONE 2 — connectors, media, analytics ================= -->
+    <rect class="n" x="48" y="346" width="731" height="80"/>
+    <text class="nt" x="64" y="374">Source connectors &#8212; the adapter boundary</text>
+    <text class="ns" x="64" y="396">read-only &#183; no PTZ, no config writes &#183; endpoints resolved server-side, never serialised to a browser</text>
+    <text class="ns" x="64" y="412">every rung terminates in one canonical CameraSource &#183; a new catalogue schema = one new registered adapter</text>
+
+    <line class="e-vid" x1="226" y1="426" x2="226" y2="470" marker-end="url(#av)"/>
+    <text class="el-vid" x="236" y="452">canonical CameraSource</text>
+
+    <rect class="n" x="48" y="470" width="340" height="96"/>
+    <text class="nt" x="64" y="496">Media workers</text>
+    <text class="ns" x="64" y="517">RTSP/TCP capture, HLS fallback</text>
+    <text class="ns" x="64" y="533">H.264 / H.265 decode &#183; PTS + stream epoch</text>
+    <text class="ns" x="64" y="549">bounded reconnect &#183; one owned capture per camera</text>
+
+    <line class="e-vid" x1="388" y1="518" x2="428" y2="518" marker-end="url(#av)"/>
+    <text class="el-vid" x="408" y="586" text-anchor="middle">sampled frames + PTS</text>
+
+    <rect class="n" x="428" y="470" width="351" height="96"/>
+    <text class="nt" x="444" y="496">Analytics workers</text>
+    <text class="ns" x="444" y="517">ANPR (plate) &#183; vehicle + person tracking</text>
+    <text class="ns" x="444" y="533">person counts &#183; suspicious activity</text>
+    <text class="ns" x="444" y="549">emits Observations &#8212; never Alerts</text>
+
+    <!-- the observation trunk splits: what runs today vs. what is proposed -->
+    <line class="e-obs" x1="604" y1="566" x2="604" y2="632"/>
+    <text class="el-obs" x="616" y="584">Observation envelope</text>
+    <text class="el-dim" x="616" y="600">plate &#183; confidence &#183; source PTS &#183; epoch</text>
+    <text class="el-dim" x="616" y="616">model version &#183; evidence crop</text>
+
+    <path class="e-obs" d="M604,632 L110,632 L110,922" marker-end="url(#ao)"/>
+    <text class="el-obs" x="120" y="690">Phase 1 &#8212; workers POST directly (TLS + service token)</text>
+
+    <!-- ================= ZONE 3 — proposed regional transport ================= -->
+    <line class="e-prop" x1="604" y1="632" x2="604" y2="740" marker-end="url(#ad)"/>
+    <rect class="n-prop" x="480" y="740" width="440" height="64"/>
+    <text class="nt" x="496" y="768" opacity="0.85">Regional event bus + store-and-forward buffer</text>
+    <text class="ns-dim" x="496" y="789">durable, ordered, mTLS, outbound only &#183; survives a link outage</text>
+    <text class="ns-dim" x="200" y="772">Proposed. Not built in Phase 1 &#8212;</text>
+    <text class="ns-dim" x="200" y="788">the direct path above is what runs today.</text>
+    <path class="e-prop" d="M700,804 L700,862 L200,862 L200,922" marker-end="url(#ad)"/>
+
+    <!-- ================= ZONE 4 — central control plane ================= -->
+    <!-- row A -->
+    <rect class="n" x="64" y="922" width="340" height="64"/>
+    <text class="nt" x="80" y="948">Sightings</text>
+    <text class="ns" x="80" y="969">every observation recorded, below threshold too</text>
+
+    <rect class="n" x="436" y="922" width="340" height="64"/>
+    <text class="nt" x="452" y="948">Camera registry + PostGIS</text>
+    <text class="ns" x="452" y="969">identity &#183; location &#183; health &#183; maintenance</text>
+
+    <!-- audit rail -->
+    <rect class="n" x="800" y="922" width="130" height="290"/>
+    <text class="nt-sm" x="814" y="948">Audit</text>
+    <text class="ns" x="814" y="972">append-only</text>
+    <text class="ns" x="814" y="988">state changes</text>
+    <text class="ns" x="814" y="1004">reads</text>
+    <text class="ns" x="814" y="1020">denials</text>
+    <text class="ns" x="814" y="1048">DB trigger blocks</text>
+    <text class="ns" x="814" y="1064">UPDATE / DELETE</text>
+    <text class="ns" x="814" y="1092">SHA-256 digest</text>
+    <text class="ns" x="814" y="1108">NDJSON archive</text>
+
+    <line class="e-thin" x1="776" y1="954" x2="800" y2="954" marker-end="url(#a)"/>
+    <line class="e-thin" x1="776" y1="1036" x2="800" y2="1036" marker-end="url(#a)"/>
+    <line class="e-thin" x1="776" y1="1171" x2="786" y2="1171"/>
+    <line class="e-thin" x1="796" y1="1171" x2="800" y2="1171" marker-end="url(#a)"/>
+
+    <!-- row B -->
+    <line class="e-obs" x1="234" y1="986" x2="234" y2="1018" marker-end="url(#ao)"/>
+    <text class="el-obs" x="244" y="1008">normalised plate</text>
+
+    <rect class="n" x="64" y="1018" width="340" height="80"/>
+    <text class="nt" x="80" y="1044">Matching &amp; correlation</text>
+    <text class="ns" x="80" y="1065">confidence gate &#8594; active-watchlist lookup</text>
+    <text class="ns" x="80" y="1081">dedup: suppress if an OPEN alert exists &lt; 15 min</text>
+
+    <rect class="n" x="436" y="1018" width="160" height="80"/>
+    <text class="nt-sm" x="452" y="1044">Watchlists</text>
+    <text class="ns" x="452" y="1065">normalised</text>
+    <text class="ns" x="452" y="1081">bulk import</text>
+    <line class="e" x1="436" y1="1058" x2="404" y2="1058" marker-end="url(#a)"/>
+    <text class="el" x="592" y="1010" text-anchor="middle">active entries</text>
+
+    <rect class="n" x="620" y="1018" width="156" height="80"/>
+    <text class="nt-sm" x="636" y="1044">Media relay</text>
+    <text class="ns" x="636" y="1065">HLS + WHEP</text>
+    <text class="ns" x="636" y="1081">grant re-checked</text>
+    <line class="e-vid" x1="660" y1="986" x2="660" y2="1018" marker-end="url(#av)"/>
+    <text class="el" x="670" y="1008">endpoint + grant</text>
+
+    <!-- row C -->
+    <line class="e-alert" x1="234" y1="1098" x2="234" y2="1130" marker-end="url(#ac)"/>
+    <text class="el-alert" x="244" y="1120">match &#8805; threshold, deduped</text>
+
+    <rect class="n" x="64" y="1130" width="340" height="82"/>
+    <text class="nt" x="80" y="1156">Alert lifecycle</text>
+    <text class="ns" x="80" y="1177">open &#8594; acknowledged &#8594; resolved</text>
+    <text class="ns" x="80" y="1193">actor-attributed, idempotent creation</text>
+
+    <rect class="n" x="436" y="1130" width="340" height="82"/>
+    <text class="nt" x="452" y="1156">Vehicle journey</text>
+    <text class="ns" x="452" y="1177">cross-camera route, source-time ordered</text>
+    <text class="ns" x="452" y="1193">restricted stops counted, never disclosed</text>
+
+    <path class="e-obs" d="M404,954 L416,954 L416,1118 L500,1118 L500,1130" marker-end="url(#ao)"/>
+    <text class="el-obs" x="430" y="1052" transform="rotate(-90 430 1052)">sightings by plate</text>
+    <line class="e" x1="608" y1="986" x2="608" y2="1130" marker-end="url(#a)"/>
+    <text class="el" x="618" y="1122">camera coordinates</text>
+
+    <!-- ================= ZONE 4 → ZONE 5 ================= -->
+    <line class="e-alert" x1="234" y1="1212" x2="234" y2="1396" marker-end="url(#ac)"/>
+    <text class="el-alert" x="244" y="1300">open alerts</text>
+    <line class="e" x1="606" y1="1212" x2="606" y2="1396" marker-end="url(#a)"/>
+    <text class="el" x="616" y="1300">route + timeline</text>
+    <path class="e-vid" d="M776,1070 L792,1070 L792,1352 L700,1352 L700,1396" marker-end="url(#av)"/>
+    <text class="el-vid" x="700" y="1342" text-anchor="middle">authenticated media</text>
+    <line class="e" x1="839" y1="1212" x2="839" y2="1396" marker-end="url(#a)"/>
+    <text class="el" x="831" y="1300" text-anchor="end">verifiable export</text>
+
+    <!-- ================= ZONE 5 ================= -->
+    <rect class="n" x="64" y="1396" width="660" height="110"/>
+    <text class="nt" x="80" y="1424">Operator console</text>
+    <text class="ns" x="80" y="1447">GIS registry &#183; live wall + focused preview &#183; alert queue</text>
+    <text class="ns" x="80" y="1463">vehicle journey &#183; Investigate &#183; watchlist admin &#183; health</text>
+    <text class="ns" x="80" y="1479">every screen shows degraded / offline / unknown, never silence</text>
+
+    <rect class="n" x="748" y="1396" width="182" height="110"/>
+    <text class="nt-sm" x="764" y="1424">Evidence export</text>
+    <text class="ns" x="764" y="1447">JSON &#183; CSV</text>
+    <text class="ns" x="764" y="1463">HTML &#183; PDF</text>
+    <text class="ns" x="764" y="1479">NDJSON archive</text>
+  </svg>
+  </div>
+  <figcaption><b>One frame, five boundaries.</b> Zone&nbsp;1 is never routable from Zone&nbsp;5:
+  the browser asks the media relay, which resolves the private endpoint server-side after
+  re-checking the department grant. Zone&nbsp;2&nbsp;&rarr;&nbsp;Zone&nbsp;3 is outbound-only,
+  so the centre never dials into a department network. The audit rail on the right receives
+  every state change, read and denial, and a database trigger rejects <code>UPDATE</code>
+  and <code>DELETE</code> from the application role.</figcaption>
+  </figure>
+</section>
+
+<section id="ladder">
+  <div class="sec-head">
+    <p class="eyebrow">02 &middot; The integration ladder</p>
+    <h2>Six ways in, one contract out</h2>
+    <p class="note">Integration is not one problem. Every source is placed on the highest
+    rung it can reach, and the rung decides what the platform can offer for that camera &mdash;
+    but all six terminate in the same internal record, so nothing downstream knows or cares
+    which rung a camera came from.</p>
+  </div>
+
+  <figure>
+  <div class="canvas">
+  <svg viewBox="0 0 1000 570" role="img"
+       aria-label="A descending staircase of six source classes, from ONVIF IP cameras down to cameras with no reachable stream, all converging on a single connector contract.">
+    <defs>
+      <marker id="b" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" class="mk"/></marker>
+    </defs>
+
+    <rect class="n" x="20" y="20" width="150" height="76"/>
+    <text class="chip"  x="34" y="42">RUNG 5</text>
+    <text class="nt-sm" x="34" y="62">IP camera / NVR</text>
+    <text class="ns"  x="34" y="78">ONVIF GetStreamUri</text>
+    <text class="ns"  x="34" y="90">auto-discovery</text>
+    <line class="e" x1="95" y1="96" x2="95" y2="390" marker-end="url(#b)"/>
+
+    <rect class="n" x="176" y="62" width="150" height="76"/>
+    <text class="chip"  x="190" y="84">RUNG 4</text>
+    <text class="nt-sm" x="190" y="104">RTSP, no ONVIF</text>
+    <text class="ns"  x="190" y="120">endpoint per camera</text>
+    <text class="ns"  x="190" y="132">probed properties</text>
+    <line class="e" x1="251" y1="138" x2="251" y2="390" marker-end="url(#b)"/>
+
+    <rect class="n" x="332" y="104" width="150" height="76"/>
+    <text class="chip"  x="346" y="126">RUNG 3</text>
+    <text class="nt-sm" x="346" y="146">Catalogue API</text>
+    <text class="ns"  x="346" y="162">read-only fetch</text>
+    <text class="ns"  x="346" y="174">catalogue is truth</text>
+    <line class="e" x1="407" y1="180" x2="407" y2="390" marker-end="url(#b)"/>
+
+    <rect class="n-prop" x="488" y="146" width="150" height="76"/>
+    <text class="chip"  x="502" y="168">RUNG 2</text>
+    <text class="nt-sm" x="502" y="188">Proprietary VMS</text>
+    <text class="ns-dim"  x="502" y="204">vendor SDK adapter</text>
+    <text class="ns-dim"  x="502" y="216">RTSP bridge</text>
+    <line class="e-prop" x1="563" y1="222" x2="563" y2="390" marker-end="url(#b)"/>
+
+    <rect class="n" x="644" y="188" width="150" height="76"/>
+    <text class="chip"  x="658" y="210">RUNG 1</text>
+    <text class="nt-sm" x="658" y="230">Analog + DVR</text>
+    <text class="ns"  x="658" y="246">existing encoder</text>
+    <text class="ns"  x="658" y="258">no camera replaced</text>
+    <line class="e" x1="719" y1="264" x2="719" y2="390" marker-end="url(#b)"/>
+
+    <rect class="n" x="800" y="230" width="150" height="76"/>
+    <text class="chip"  x="814" y="252">RUNG 0</text>
+    <text class="nt-sm" x="814" y="272">No reachable feed</text>
+    <text class="ns"  x="814" y="288">registry-only</text>
+    <text class="ns"  x="814" y="300">full Model 1 value</text>
+    <line class="e" x1="875" y1="306" x2="875" y2="390" marker-end="url(#b)"/>
+
+    <rect class="n-flat" x="20" y="390" width="960" height="90"/>
+    <text class="nt" x="36" y="418">One connector contract &#8212; the internal CameraSource</text>
+    <text class="ns" x="36" y="440">external_id &#183; source_system &#183; catalogue_observed_at &#183; source_name &#183; source_location_label</text>
+    <text class="ns" x="36" y="456">codec &#183; width &#183; height &#183; reported_fps &#183; bitrate_bps &#183; live &#183; endpoints{ rtsp, whep, hls }</text>
+    <text class="ns" x="36" y="472">unknown stays unknown &#8212; an empty string is never defaulted, and a place-name is never coordinates</text>
+
+    <line class="e" x1="500" y1="480" x2="500" y2="516" marker-end="url(#b)"/>
+    <text class="nt" x="500" y="546" text-anchor="middle">Analytics, matching, alerting, journeys and the console are identical for every rung.</text>
+  </svg>
+  </div>
+  <figcaption><b>Rung 0 is a capability, not a placeholder.</b> A camera with no reachable feed
+  still contributes inventory, GIS placement, coverage and gap analysis, and maintenance
+  tracking &mdash; the endpoint columns are nullable for exactly this case. Rung&nbsp;2 is drawn
+  dashed because only one adapter (<code>sentinel_default</code>) ships today; a genuinely
+  different catalogue schema means writing one new registered adapter and changing nothing else.</figcaption>
+  </figure>
+</section>
+
+<section id="onboarding">
+  <div class="sec-head">
+    <p class="eyebrow">03 &middot; Onboarding</p>
+    <h2>Four stages, each independently re-runnable</h2>
+    <p class="note">A partial estate onboarding can be resumed without redoing successful work,
+    and any stage can fail without corrupting the registry. Every stage is idempotent on
+    <code>camera_id</code>.</p>
+  </div>
+
+  <figure>
+  <div class="canvas">
+  <svg viewBox="0 0 1000 256" role="img"
+       aria-label="Four sequential onboarding stages: catalogue sync, stream probe, survey capture, and geocode, each idempotent on camera id.">
+    <defs>
+      <marker id="c" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" class="mk"/></marker>
+    </defs>
+
+    <rect class="n" x="20" y="40" width="210" height="180"/>
+    <text class="chip"  x="36" y="68">STAGE 1</text>
+    <text class="nt"    x="36" y="94">Catalogue sync</text>
+    <text class="ns"    x="36" y="120">read-only fetch</text>
+    <text class="ns"    x="36" y="136">upsert by camera_id</text>
+    <text class="ns"    x="36" y="160">a camera that disappears</text>
+    <text class="ns"    x="36" y="176">is logged, never deleted</text>
+    <text class="chip"  x="36" y="204">IDEMPOTENT</text>
+
+    <rect class="n" x="270" y="40" width="210" height="180"/>
+    <text class="chip"  x="286" y="68">STAGE 2</text>
+    <text class="nt"    x="286" y="94">Stream probe</text>
+    <text class="ns"    x="286" y="120">ffprobe RTSP/TCP,</text>
+    <text class="ns"    x="286" y="136">then HLS on failure</text>
+    <text class="ns"    x="286" y="160">codec, size, fps, bitrate</text>
+    <text class="ns"    x="286" y="176">+ append-only health row</text>
+    <text class="chip"  x="286" y="204">IDEMPOTENT</text>
+
+    <rect class="n" x="520" y="40" width="210" height="180"/>
+    <text class="chip"  x="536" y="68">STAGE 3</text>
+    <text class="nt"    x="536" y="94">Survey capture</text>
+    <text class="ns"    x="536" y="120">one still frame</text>
+    <text class="ns"    x="536" y="136">per camera</text>
+    <text class="ns"    x="536" y="160">a human sets anpr_viable</text>
+    <text class="ns"    x="536" y="176">&#8212; deliberately manual</text>
+    <text class="chip"  x="536" y="204">IDEMPOTENT</text>
+
+    <rect class="n" x="770" y="40" width="210" height="180"/>
+    <text class="chip"  x="786" y="68">STAGE 4</text>
+    <text class="nt"    x="786" y="94">Geocode</text>
+    <text class="ns"    x="786" y="120">forward-geocode the</text>
+    <text class="ns"    x="786" y="136">location label, once</text>
+    <text class="ns"    x="786" y="160">failure leaves lat/lng null</text>
+    <text class="ns"    x="786" y="176">and the map says unplaced</text>
+    <text class="chip"  x="786" y="204">IDEMPOTENT</text>
+
+    <line class="e" x1="230" y1="130" x2="270" y2="130" marker-end="url(#c)"/>
+    <line class="e" x1="480" y1="130" x2="520" y2="130" marker-end="url(#c)"/>
+    <line class="e" x1="730" y1="130" x2="770" y2="130" marker-end="url(#c)"/>
+  </svg>
+  </div>
+  <figcaption><b>Two behaviours are deliberate.</b> A camera that vanishes from a catalogue is
+  logged rather than deleted &mdash; the registry is a durable asset record, not a mirror of
+  current source availability. And a failed geocode leaves the coordinates null so the map
+  honestly shows the camera as unplaced, rather than dropping a pin somewhere
+  plausible-looking and wrong.</figcaption>
+  </figure>
+</section>
+
+<section id="decision">
+  <div class="sec-head">
+    <p class="eyebrow">04 &middot; The live decision path</p>
+    <h2>Three gates stand between a plate and an interrupted operator</h2>
+    <p class="note">The branches on the right are where most of the design lives. None of them
+    throws data away &mdash; each one only decides whether a human is interrupted.</p>
+  </div>
+
+  <figure>
+  <div class="canvas canvas--narrow">
+  <svg viewBox="0 0 720 860" role="img"
+       aria-label="Vertical decision flow from a sampled frame through sighting creation, a confidence gate, a watchlist lookup and a deduplication gate, to a created alert raised on the operator console, with three side branches that record data without alerting.">
+    <defs>
+      <marker id="d"  markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" class="mk"/></marker>
+      <marker id="dv" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" class="mk-vid"/></marker>
+      <marker id="do" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" class="mk-obs"/></marker>
+      <marker id="dc" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" class="mk-alert"/></marker>
+    </defs>
+
+    <rect class="n" x="120" y="20" width="280" height="64"/>
+    <text class="nt" x="136" y="48">Sampled frame</text>
+    <text class="ns" x="136" y="70">source PTS + stream epoch carried forward</text>
+    <line class="e-vid" x1="260" y1="84" x2="260" y2="112" marker-end="url(#dv)"/>
+
+    <rect class="n" x="120" y="112" width="280" height="64"/>
+    <text class="nt" x="136" y="140">Detect &#8594; track &#8594; crop &#8594; OCR</text>
+    <text class="ns" x="136" y="160">plate crop gated by pixel width</text>
+    <text class="ns" x="136" y="174">then a per-track vote</text>
+    <line class="e-obs" x1="260" y1="176" x2="260" y2="204" marker-end="url(#do)"/>
+
+    <rect class="n" x="120" y="204" width="280" height="64"/>
+    <text class="nt" x="136" y="232">POST /api/sightings</text>
+    <text class="ns" x="136" y="252">worker service token &#183; emits once, on the</text>
+    <text class="ns" x="136" y="266">first CONFIRMED plate per track</text>
+    <line class="e-obs" x1="260" y1="268" x2="260" y2="296" marker-end="url(#do)"/>
+
+    <rect class="n" x="120" y="296" width="280" height="64"/>
+    <text class="nt" x="136" y="324">Sighting written</text>
+    <text class="ns" x="136" y="344">always recorded, even below</text>
+    <text class="ns" x="136" y="358">the alert threshold</text>
+    <line class="e-obs" x1="260" y1="360" x2="260" y2="388" marker-end="url(#do)"/>
+
+    <path class="n" d="M136,388 L384,388 L400,420 L384,452 L136,452 L120,420 Z"/>
+    <text class="nt-sm" x="150" y="415">confidence &#8805; ALERT_MIN?</text>
+    <text class="ns" x="150" y="435">the operator sets this</text>
+    <line class="e" x1="400" y1="420" x2="440" y2="420" marker-end="url(#d)"/>
+    <text class="el-dim" x="420" y="412" text-anchor="middle">no</text>
+    <rect class="n-flat" x="440" y="388" width="250" height="64"/>
+    <text class="nt-sm" x="456" y="414">No alert raised</text>
+    <text class="ns" x="456" y="436">the sighting still stands</text>
+    <line class="e-obs" x1="260" y1="452" x2="260" y2="480" marker-end="url(#do)"/>
+    <text class="el-obs" x="270" y="472">yes</text>
+
+    <path class="n" d="M136,480 L384,480 L400,512 L384,544 L136,544 L120,512 Z"/>
+    <text class="nt-sm" x="150" y="507">on an active watchlist?</text>
+    <text class="ns" x="150" y="527">exact match, normalised value</text>
+    <line class="e" x1="400" y1="512" x2="440" y2="512" marker-end="url(#d)"/>
+    <text class="el-dim" x="420" y="504" text-anchor="middle">no</text>
+    <rect class="n-flat" x="440" y="480" width="250" height="64"/>
+    <text class="nt-sm" x="456" y="506">No match</text>
+    <text class="ns" x="456" y="528">observation data stays complete</text>
+    <line class="e-obs" x1="260" y1="544" x2="260" y2="572" marker-end="url(#do)"/>
+    <text class="el-obs" x="270" y="564">match</text>
+
+    <path class="n" d="M136,572 L384,572 L400,604 L384,636 L136,636 L120,604 Z"/>
+    <text class="nt-sm" x="150" y="599">an OPEN alert already?</text>
+    <text class="ns" x="150" y="619">same plate + entry, &lt; 15 min</text>
+    <line class="e" x1="400" y1="604" x2="440" y2="604" marker-end="url(#d)"/>
+    <text class="el-dim" x="420" y="596" text-anchor="middle">yes</text>
+    <rect class="n-flat" x="440" y="572" width="250" height="64"/>
+    <text class="nt-sm" x="456" y="598">Suppressed</text>
+    <text class="ns" x="456" y="620">deduplicated, not discarded</text>
+    <line class="e-alert" x1="260" y1="636" x2="260" y2="664" marker-end="url(#dc)"/>
+    <text class="el-alert" x="270" y="656">no</text>
+
+    <rect class="n" x="120" y="664" width="280" height="64"/>
+    <text class="nt" x="136" y="692">Alert created</text>
+    <text class="ns" x="136" y="712">idempotent &#183; severity assigned</text>
+    <text class="ns" x="136" y="726">open &#8594; acknowledged &#8594; resolved</text>
+    <line class="e-alert" x1="260" y1="728" x2="260" y2="756" marker-end="url(#dc)"/>
+
+    <rect class="n" x="120" y="756" width="280" height="64"/>
+    <text class="nt" x="136" y="784">The console raises it</text>
+    <text class="ns" x="136" y="804">camera &#183; location &#183; time</text>
+    <text class="ns" x="136" y="818">confidence + evidence crop</text>
+  </svg>
+  </div>
+  <figcaption><b>Two properties are load-bearing.</b> A sighting is written <em>before</em> any
+  gate, so observation data stays complete and the threshold governs only whether a person is
+  interrupted. And an acknowledged or resolved alert never suppresses a new one &mdash; only a
+  still-open alert does, so a plate seen again after review raises fresh attention rather than
+  disappearing into a dedup window.</figcaption>
+  </figure>
+</section>
+
+<footer>
+  <p class="note">Sentinel &mdash; Gujarat Police Innovation Hackathon 2026, CCTV Integration
+  Challenge. Drawn from <code>docs/architecture.md</code>, <code>docs/hld.md</code> &sect;3&ndash;&sect;10,
+  and <code>DESIGN.md</code>. Palette and type follow the operator console&rsquo;s own token
+  system: one hue generates the neutral ramp, and colour is spent only where something moves.</p>
+</footer>
+
+</div>

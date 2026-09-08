@@ -1,0 +1,100 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+
+# Node
+node_modules/
+.npm/
+.pnpm-store/
+
+# Builds, coverage, caches, and runtime data
+build/
+dist/
+coverage/
+.cache/
+tmp/
+data/
+artifacts/private/
+
+# Video and model artifacts
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.onnx
+*.pt
+*.pth
+*.engine
+
+# Captured camera stills (Stage 3 survey) -- live footage frames may show
+# faces/plates; never commit, keep local-only per the sandbox access rules.
+backend/survey/*.jpg
+backend/survey/*.jpeg
+backend/survey/*.png
+
+# Analytics worker runtime logs (operational output, not source)
+multi-object-tracking/worker_logs/
+
+# Uploaded/normalised recordings and their derived thumbnails (Investigate)
+# -- real CCTV footage and vehicle crops, same reasoning as the survey
+# stills above. Only backend/recordings/<sha256>/... paths ever get
+# written here; the DB (recordings.normalised_path, tracks.thumb_path)
+# holds the references, never the bytes -- see the note below.
+backend/recordings/
+
+# Locally generated test fixtures for Investigate (built on demand by
+# backend/scripts/make_test_fixture.py from a real survey still -- not
+# checked in for the same reason).
+/.fixtures/
+
+# Sighting evidence crops (Section 5 live-test Phase 3) -- same reasoning
+# as backend/recordings/ above: real vehicle/plate crops, path lives in
+# sightings.evidence_path, never the bytes.
+backend/evidence/
+
+# Section 5 live-test fixture (backend/scripts/build_live_test_fixture.py):
+# real survey stills with a synthetic plate composited on, panned into
+# looping clips. Same privacy reasoning as backend/survey/*.jpg -- never
+# checked in.
+/fixtures/live-test/
+
+# Logs (operational output, not source)
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python packaging metadata and virtualenv variants
+*.egg-info/
+.eggs/
+venv/
+env/
+ENV/
+
+# Vite / frontend tooling caches
+.vite/
+*.local
+
+# Office temp lock files (e.g. ~$Presentation.pptx)
+~$*
+
+# IDE and OS
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/

@@ -1,0 +1,61 @@
+name: Feature or deliverable
+description: Create a traceable implementation task.
+title: "[AREA] "
+labels: []
+body:
+  - type: input
+    id: task_id
+    attributes:
+      label: Task ID
+      placeholder: ING-001
+    validations:
+      required: true
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: One observable outcome.
+    validations:
+      required: true
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: Work explicitly excluded from this task.
+  - type: input
+    id: requirements
+    attributes:
+      label: Requirement IDs
+      placeholder: GOV-ING-001, GOV-ING-003
+    validations:
+      required: true
+  - type: input
+    id: checkpoint
+    attributes:
+      label: Target checkpoint
+      placeholder: C2
+    validations:
+      required: true
+  - type: textarea
+    id: contracts
+    attributes:
+      label: Dependencies and contracts
+      description: Relevant ADRs, API schemas, branches, and blockers.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: "- [ ] ..."
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification commands and evidence
+      description: Exact commands and expected proof.
+    validations:
+      required: true
+  - type: input
+    id: reviewer
+    attributes:
+      label: Reviewer
