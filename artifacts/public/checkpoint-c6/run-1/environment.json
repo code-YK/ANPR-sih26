@@ -1,0 +1,11 @@
+{
+  "python": "3.13.12",
+  "platform": "darwin",
+  "git_commit": "a4d0d7dff21231e93f5e0ba245781790f56b1013",
+  "fastapi": "0.115.6",
+  "sqlalchemy": "2.0.36",
+  "alembic": "1.14.0",
+  "ultralytics": "8.4.133",
+  "onnxruntime": "1.29.0",
+  "torch": "2.13.0"
+}

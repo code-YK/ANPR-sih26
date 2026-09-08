@@ -1,0 +1,104 @@
+{
+  "run_id": "20260831T130916Z",
+  "plate": "GJ01TT9911",
+  "camera_ids": [
+    "manual-4",
+    "manual-5",
+    "manual-6"
+  ],
+  "scenarios": [
+    {
+      "name": "detection-to-alert latency (p50/p95)",
+      "target": "alert visible within 5s of a usable confirmed observation (p95)",
+      "passed": true,
+      "detail": "1 sample(s), p50=2.924s p95=2.924s",
+      "measurements": {
+        "sample_count": 1,
+        "latencies_s": [
+          2.924
+        ],
+        "p50_s": 2.924,
+        "p95_s": 2.924,
+        "queue_depth_max": 30,
+        "queue_depth_samples": 570,
+        "queue_depth_at_cap_fraction": 0.18,
+        "fps_by_camera": {
+          "manual-4": {
+            "min": 4.8,
+            "max": 13.2,
+            "avg": 11.9
+          },
+          "manual-5": {
+            "min": 6.9,
+            "max": 6.9,
+            "avg": 6.9
+          },
+          "manual-6": {
+            "min": 3.6,
+            "max": 12.3,
+            "avg": 11.3
+          }
+        },
+        "dropped_frames_delta": {
+          "manual-4": 2981,
+          "manual-5": 0,
+          "manual-6": 3648
+        }
+      }
+    },
+    {
+      "name": "queue growth",
+      "target": "bounded (drop-oldest) rather than unbounded; not pinned at cap for a sustained period",
+      "passed": true,
+      "detail": "max observed queue_depth=30 (cap=30, hard-bounded by design), at-cap for 0.18 of samples"
+    },
+    {
+      "name": "duplicate alert storm",
+      "target": "no duplicate alert storm (at most one alert per sighting)",
+      "passed": true,
+      "detail": "1 alert(s) across 2 sighting(s) for GJ01TT9911"
+    },
+    {
+      "name": "feed interruption and recovery",
+      "target": "recovers without a tight reconnect loop",
+      "passed": true,
+      "detail": "confirmed_down=True, recovery_time_s=1.3, reconnect_events=0",
+      "measurements": {
+        "recovery_time_s": 1.3,
+        "reconnect_events": 0
+      }
+    },
+    {
+      "name": "worker crash and recovery",
+      "target": "supervisor reaps, backs off, and restarts a killed worker",
+      "passed": true,
+      "detail": "analytics_concurrency_smoke_test.py exit=0 (81.1s)\n\n============================================================\n9/9 passed\n============================================================\ndeleted cameras ['manual-8', 'manual-9', 'manual-10', 'manual-11'] (and their sightings/alerts/analytics_counts)\ndeleted watchlist entry 151"
+    },
+    {
+      "name": "backend restart",
+      "target": "recovers within 30s, no data loss, analytics_enabled cleared by design (not auto-resumed)",
+      "passed": true,
+      "detail": "downtime_s=1.6, sightings 2->2, alerts 1->1, still-enabled after restart=[]",
+      "measurements": {
+        "downtime_s": 1.6
+      }
+    },
+    {
+      "name": "database connection interruption",
+      "target": "recovers without the backend process crashing",
+      "passed": true,
+      "detail": "terminated 3 backend connection(s); recovered=True in 1.1s (last_status=200)",
+      "measurements": {
+        "recovery_time_s": 1.1
+      }
+    },
+    {
+      "name": "three concurrent ANPR workers",
+      "target": "at least three cameras run ANPR concurrently",
+      "passed": true,
+      "detail": "3/3 workers running concurrently at end of rehearsal"
+    }
+  ],
+  "passed": 8,
+  "total": 8
+}

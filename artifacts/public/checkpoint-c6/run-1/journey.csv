@@ -1,0 +1,4 @@
+sequence,seen_at,camera_id,camera_name,department,location_text,latitude,longitude,geocode_confidence,confidence,evidence_url,alert_id,alert_status
+1,2026-08-31T12:50:41.462000Z,manual-5,Live test camera B,Police,"Section 5 live-test fixture, role=b",23.03,72.585,exact,0.9998246401548385,/api/sightings/187/evidence,75,open
+2,2026-08-31T12:50:41.499000Z,manual-4,Live test camera A,Police,"Section 5 live-test fixture, role=a",23.0225,72.5714,exact,0.9994656324386597,/api/sightings/186/evidence,74,open
+3,2026-08-31T12:50:41.913000Z,manual-6,Live test camera C,Police,"Section 5 live-test fixture, role=c",23.04,72.6,exact,0.9997474908828736,/api/sightings/188/evidence,,

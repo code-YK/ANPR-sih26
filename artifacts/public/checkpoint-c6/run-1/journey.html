@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sentinel Vehicle Journey Report</title>
+<style>
+  @page { size: A4; margin: 2cm; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; font-size: 11pt; }
+  h1 { font-size: 20pt; margin-bottom: 0; }
+  .subtitle { color: #666; margin-top: 4px; margin-bottom: 24px; font-size: 10pt; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 9pt; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #ddd; vertical-align: top; }
+  tr { page-break-inside: avoid; break-inside: avoid; }
+  thead { display: table-header-group; }
+  th { background: #f2f2f2; }
+  .stat-row { display: flex; gap: 24px; margin: 12px 0 24px; }
+  .stat .n { font-size: 20pt; font-weight: 700; }
+  .stat .label { color: #666; font-size: 9pt; }
+  .empty { color: #888; font-style: italic; }
+  .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 8.5pt; }
+  .badge-open { background: #fde8e8; color: #b00020; }
+  .badge-acknowledged { background: #fff4e0; color: #8a5300; }
+  .badge-resolved { background: #e8f5e9; color: #1b5e20; }
+  .badge-none { color: #888; }
+  .note { color: #666; font-size: 9pt; margin-top: 24px; }
+</style>
+</head>
+<body>
+  <h1>Vehicle Journey Report</h1>
+  <div class="subtitle">
+    Plate GJ01TT9911 &mdash; generated 2026-08-31 12:50 UTC
+  </div>
+
+  <div class="stat-row">
+    <div class="stat"><div class="n">3</div><div class="label">sightings</div></div>
+    <div class="stat"><div class="n">3</div><div class="label">cameras</div></div>
+    <div class="stat"><div class="n">0</div><div class="label">unplaced stops</div></div>
+    <div class="stat"><div class="n">0</div><div class="label">restricted stops</div></div>
+  </div>
+
+  
+  <table>
+    <tr>
+      <th>#</th><th>Source timestamp</th><th>Camera</th><th>Department</th>
+      <th>Location</th><th>Coordinates</th><th>Confidence</th><th>Alert</th><th>Evidence</th>
+    </tr>
+    
+    <tr>
+      <td>1</td>
+      <td>2026-08-31 12:50:41 UTC</td>
+      <td>Live test camera B (manual-5)</td>
+      <td>Police</td>
+      <td>Section 5 live-test fixture, role=b</td>
+      <td>
+        
+          23.030000, 72.585000 (exact)
+        
+      </td>
+      <td>1.00</td>
+      <td>
+        
+          <span class="badge badge-open">open</span>
+        
+      </td>
+      <td>/api/sightings/187/evidence</td>
+    </tr>
+    
+    <tr>
+      <td>2</td>
+      <td>2026-08-31 12:50:41 UTC</td>
+      <td>Live test camera A (manual-4)</td>
+      <td>Police</td>
+      <td>Section 5 live-test fixture, role=a</td>
+      <td>
+        
+          23.022500, 72.571400 (exact)
+        
+      </td>
+      <td>1.00</td>
+      <td>
+        
+          <span class="badge badge-open">open</span>
+        
+      </td>
+      <td>/api/sightings/186/evidence</td>
+    </tr>
+    
+    <tr>
+      <td>3</td>
+      <td>2026-08-31 12:50:41 UTC</td>
+      <td>Live test camera C (manual-6)</td>
+      <td>Police</td>
+      <td>Section 5 live-test fixture, role=c</td>
+      <td>
+        
+          23.040000, 72.600000 (exact)
+        
+      </td>
+      <td>1.00</td>
+      <td>
+        
+          <span class="badge-none">—</span>
+        
+      </td>
+      <td>/api/sightings/188/evidence</td>
+    </tr>
+    
+  </table>
+  
+
+  <p class="note">
+    Evidence column shows the authenticated API path for each sighting's evidence crop, where retained --
+    not a public link. Restricted stops (on cameras outside this viewer's authorised departments) are
+    counted above but not listed by row.
+  </p>
+</body>
+</html>
