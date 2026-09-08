@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sentinel Model 1 Gap Analysis</title>
+<style>
+  @page { size: A4; margin: 2cm; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; font-size: 11pt; }
+  h1 { font-size: 20pt; margin-bottom: 0; }
+  .subtitle { color: #666; margin-top: 4px; margin-bottom: 24px; font-size: 10pt; }
+  h2 { font-size: 14pt; border-bottom: 2px solid #1a1a1a; padding-bottom: 4px; margin-top: 32px; }
+  p.lede { color: #444; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 9.5pt; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #ddd; vertical-align: top; }
+  tr { page-break-inside: avoid; break-inside: avoid; }
+  thead { display: table-header-group; }
+  th { background: #f2f2f2; }
+  .priority-yes { color: #b00020; font-weight: 600; }
+  .priority-no { color: #888; }
+  .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 8.5pt; }
+  .badge-uncovered { background: #fde8e8; color: #b00020; }
+  .badge-covered { background: #e8f5e9; color: #1b5e20; }
+  .stat-row { display: flex; gap: 24px; margin: 12px 0; }
+  .stat { }
+  .stat .n { font-size: 20pt; font-weight: 700; }
+  .stat .label { color: #666; font-size: 9pt; }
+  .empty { color: #888; font-style: italic; }
+  ul.district-list { columns: 3; font-size: 9.5pt; }
+</style>
+</head>
+<body>
+  <h1>Model 1 Gap Analysis</h1>
+  <div class="subtitle">Sentinel camera registry &mdash; generated {{ report.generated_at.strftime('%Y-%m-%d %H:%M UTC') }} &mdash; {{ report.total_cameras }} cameras in registry</div>
+
+  <h2>1. Capability gaps</h2>
+  <p class="lede">Cameras that exist but cannot read plates. These are junctions covered by a camera but not by ANPR
+    capability &mdash; the strongest procurement recommendation in this report.</p>
+  <div class="stat-row">
+    <div class="stat"><div class="n">{{ report.capability_gaps|length }}</div><div class="label">cameras not ANPR-viable</div></div>
+    <div class="stat"><div class="n">{{ report.capability_gaps|selectattr('replacement_priority')|list|length }}</div><div class="label">replacement priority</div></div>
+  </div>
+  {% if report.capability_gaps %}
+  <table>
+    <tr><th>Camera</th><th>Location</th><th>Department</th><th>Reason</th><th>Replacement priority</th></tr>
+    {% for g in report.capability_gaps %}
+    <tr>
+      <td>#{{ g.camera_number }}{% if g.name != "Camera " ~ g.camera_number|string %} &mdash; {{ g.name }}{% endif %}</td>
+      <td>{{ g.location_text }}</td>
+      <td>{{ g.department or '—' }}</td>
+      <td>{{ g.reason }}</td>
+      <td class="{{ 'priority-yes' if g.replacement_priority else 'priority-no' }}">{{ 'Yes' if g.replacement_priority else 'No' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty">No capability gaps recorded.</p>
+  {% endif %}
+
+  <h2>2. Coverage gaps</h2>
+  <p class="lede">Cameras per district, derived from geocoded coordinates (nearest-centroid approximation --
+    not a boundary-polygon lookup). {{ report.unplaced_camera_count }} camera(s) could not be geocoded and are
+    excluded from this section.</p>
+  <div class="stat-row">
+    <div class="stat"><div class="n">{{ report.coverage_covered|length }}</div><div class="label">districts with coverage</div></div>
+    <div class="stat"><div class="n">{{ report.coverage_uncovered_districts|length }}</div><div class="label">districts with no camera</div></div>
+  </div>
+  <table>
+    <tr><th>District</th><th>Camera count</th></tr>
+    {% for c in report.coverage_covered %}
+    <tr><td>{{ c.district }}</td><td><span class="badge badge-covered">{{ c.camera_count }}</span></td></tr>
+    {% endfor %}
+  </table>
+  <p><strong>Districts with zero coverage:</strong></p>
+  {% if report.coverage_uncovered_districts %}
+  <ul class="district-list">
+    {% for d in report.coverage_uncovered_districts %}
+    <li><span class="badge badge-uncovered">{{ d }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">Every district has at least one camera.</p>
+  {% endif %}
+
+  <h2>3. Health / ageing gaps</h2>
+  <p class="lede">Cameras that are offline, stale, or below a usable resolution/bitrate threshold.</p>
+  {% if report.health_gaps %}
+  <table>
+    <tr><th>Camera</th><th>Location</th><th>Department</th><th>Reasons</th></tr>
+    {% for g in report.health_gaps %}
+    <tr>
+      <td>#{{ g.camera_number }}{% if g.name != "Camera " ~ g.camera_number|string %} &mdash; {{ g.name }}{% endif %}</td>
+      <td>{{ g.location_text }}</td>
+      <td>{{ g.department or '—' }}</td>
+      <td>{{ g.reasons|join('; ') }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty">No health/ageing gaps recorded.</p>
+  {% endif %}
+</body>
+</html>

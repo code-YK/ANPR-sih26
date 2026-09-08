@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sentinel Vehicle Journey Report</title>
+<style>
+  @page { size: A4; margin: 2cm; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; font-size: 11pt; }
+  h1 { font-size: 20pt; margin-bottom: 0; }
+  .subtitle { color: #666; margin-top: 4px; margin-bottom: 24px; font-size: 10pt; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 9pt; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #ddd; vertical-align: top; }
+  tr { page-break-inside: avoid; break-inside: avoid; }
+  thead { display: table-header-group; }
+  th { background: #f2f2f2; }
+  .stat-row { display: flex; gap: 24px; margin: 12px 0 24px; }
+  .stat .n { font-size: 20pt; font-weight: 700; }
+  .stat .label { color: #666; font-size: 9pt; }
+  .empty { color: #888; font-style: italic; }
+  .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 8.5pt; }
+  .badge-open { background: #fde8e8; color: #b00020; }
+  .badge-acknowledged { background: #fff4e0; color: #8a5300; }
+  .badge-resolved { background: #e8f5e9; color: #1b5e20; }
+  .badge-none { color: #888; }
+  .note { color: #666; font-size: 9pt; margin-top: 24px; }
+</style>
+</head>
+<body>
+  <h1>Vehicle Journey Report</h1>
+  <div class="subtitle">
+    Plate {{ report.plate }} &mdash; generated {{ report.generated_at.strftime('%Y-%m-%d %H:%M UTC') }}
+  </div>
+
+  <div class="stat-row">
+    <div class="stat"><div class="n">{{ report.sighting_count }}</div><div class="label">sightings</div></div>
+    <div class="stat"><div class="n">{{ report.camera_count }}</div><div class="label">cameras</div></div>
+    <div class="stat"><div class="n">{{ report.unplaced_stops }}</div><div class="label">unplaced stops</div></div>
+    <div class="stat"><div class="n">{{ report.restricted_stops }}</div><div class="label">restricted stops</div></div>
+  </div>
+
+  {% if report.stops %}
+  <table>
+    <tr>
+      <th>#</th><th>Source timestamp</th><th>Camera</th><th>Department</th>
+      <th>Location</th><th>Coordinates</th><th>Confidence</th><th>Alert</th><th>Evidence</th>
+    </tr>
+    {% for s in report.stops %}
+    <tr>
+      <td>{{ s.sequence }}</td>
+      <td>{{ s.seen_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
+      <td>{{ s.camera_name }} ({{ s.camera_id }})</td>
+      <td>{{ s.department or '—' }}</td>
+      <td>{{ s.location_text }}</td>
+      <td>
+        {% if s.latitude is not none and s.longitude is not none %}
+          {{ '%.6f'|format(s.latitude) }}, {{ '%.6f'|format(s.longitude) }} ({{ s.geocode_confidence }})
+        {% else %}
+          <span class="empty">unplaced</span>
+        {% endif %}
+      </td>
+      <td>{{ '%.2f'|format(s.confidence) if s.confidence is not none else '—' }}</td>
+      <td>
+        {% if s.alert_status %}
+          <span class="badge badge-{{ s.alert_status }}">{{ s.alert_status }}</span>
+        {% else %}
+          <span class="badge-none">—</span>
+        {% endif %}
+      </td>
+      <td>{{ s.evidence_url if s.evidence_url else '—' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty">No sightings on record for this plate.</p>
+  {% endif %}
+
+  <p class="note">
+    Evidence column shows the authenticated API path for each sighting's evidence crop, where retained --
+    not a public link. Restricted stops (on cameras outside this viewer's authorised departments) are
+    counted above but not listed by row.
+  </p>
+</body>
+</html>
