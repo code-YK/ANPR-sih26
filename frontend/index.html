@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentinel Camera Registry</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Sentinel <span class="sub">Camera Registry &amp; Onboarding</span></h1>
+  <nav>
+    <button class="nav-btn active" data-view="list">Camera List</button>
+    <button class="nav-btn" data-view="map">GIS Map</button>
+    <button class="nav-btn" data-view="gap">Gap Analysis</button>
+  </nav>
+</header>
+
+<main>
+  <!-- Camera list -->
+  <section id="view-list" class="view active">
+    <div class="toolbar">
+      <select id="filter-department">
+        <option value="">All departments</option>
+        <option>Health</option><option>Police</option><option>GSRTC</option>
+        <option>Panchayat</option><option>Municipal</option>
+      </select>
+      <select id="filter-anpr">
+        <option value="">Any ANPR status</option>
+        <option value="true">ANPR viable</option>
+        <option value="false">Not ANPR viable</option>
+        <option value="null">Not surveyed</option>
+      </select>
+      <select id="filter-live">
+        <option value="">Any live status</option>
+        <option value="true">Live</option>
+        <option value="false">Offline</option>
+      </select>
+      <div class="spacer"></div>
+      <label class="secondary" style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;background:white;">
+        Bulk import CSV
+        <input type="file" id="bulk-csv-input" accept=".csv" style="display:none">
+      </label>
+      <button class="secondary" id="btn-resync">Re-sync catalogue</button>
+      <button class="primary" id="btn-add-camera">+ Add camera</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>Name</th><th>Location</th><th>Department</th><th>Live</th>
+          <th>ANPR viable</th><th>Geocode</th><th>Transport</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="camera-table-body"></tbody>
+    </table>
+  </section>
+
+  <!-- Map -->
+  <section id="view-map" class="view">
+    <div class="toolbar">
+      <select id="map-filter-department">
+        <option value="">All departments</option>
+        <option>Health</option><option>Police</option><option>GSRTC</option>
+        <option>Panchayat</option><option>Municipal</option>
+      </select>
+      <select id="map-filter-anpr">
+        <option value="">Any ANPR status</option>
+        <option value="true">ANPR viable</option>
+        <option value="false">Not ANPR viable</option>
+      </select>
+      <select id="map-filter-live">
+        <option value="">Any live status</option>
+        <option value="true">Live</option>
+        <option value="false">Offline</option>
+      </select>
+    </div>
+    <div class="map-layout">
+      <div id="map"></div>
+      <div class="unplaced-panel">
+        <h3>Unplaced cameras</h3>
+        <div id="unplaced-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Gap analysis -->
+  <section id="view-gap" class="view">
+    <div class="gap-actions">
+      <button class="primary" id="btn-gap-refresh">Refresh report</button>
+      <button class="secondary" id="btn-gap-pdf">Download PDF</button>
+    </div>
+    <iframe class="gap-embed" id="gap-frame"></iframe>
+  </section>
+</main>
+
+<!-- Edit modal -->
+<div class="modal-backdrop" id="edit-modal">
+  <div class="modal">
+    <h2 id="edit-modal-title">Edit camera</h2>
+    <form id="edit-form">
+      <div class="field">
+        <label>Department</label>
+        <select name="department">
+          <option value="">—</option>
+          <option>Health</option><option>Police</option><option>GSRTC</option>
+          <option>Panchayat</option><option>Municipal</option>
+        </select>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Ownership</label>
+          <select name="ownership">
+            <option value="">—</option>
+            <option value="government">government</option>
+            <option value="private">private</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Camera type</label>
+          <select name="camera_type">
+            <option value="">—</option>
+            <option value="fixed">fixed</option>
+            <option value="ptz">ptz</option>
+            <option value="analog">analog</option>
+            <option value="ip">ip</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Connectivity</label>
+        <input name="connectivity" placeholder="e.g. fiber, 4G, unknown">
+      </div>
+      <div class="field">
+        <label>Storage location</label>
+        <input name="storage_location" placeholder="where footage actually lives">
+      </div>
+      <div class="field">
+        <label>Retention (days)</label>
+        <input name="retention_days" type="number" min="0">
+      </div>
+      <div class="field">
+        <label>Metadata confidence</label>
+        <select name="metadata_confidence">
+          <option value="">—</option>
+          <option value="confirmed">confirmed</option>
+          <option value="inferred">inferred</option>
+        </select>
+        <div class="hint">Set "inferred" if department/ownership was guessed from the location name rather than a real source.</div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Latitude (manual override)</label>
+          <input name="latitude" type="number" step="0.000001" id="edit-lat-input">
+        </div>
+        <div class="field">
+          <label>Longitude (manual override)</label>
+          <input name="longitude" type="number" step="0.000001" id="edit-lng-input">
+        </div>
+      </div>
+      <div class="hint">Setting both lat/lng marks geocode confidence as "exact". Click the map or drag the pin to set them instead of typing.</div>
+      <div class="field">
+        <div id="edit-map" class="location-picker"></div>
+        <div class="hint" id="edit-map-hint">Click anywhere on the map to place/move the pin.</div>
+      </div>
+      <div class="field">
+        <label>ANPR viable</label>
+        <select name="anpr_viable">
+          <option value="">— not surveyed —</option>
+          <option value="true">Yes</option>
+          <option value="false">No</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>ANPR notes</label>
+        <textarea name="anpr_notes" rows="2" placeholder="e.g. night IR motion blur, PTZ wide angle, plate too few pixels"></textarea>
+      </div>
+      <div class="actions">
+        <button type="button" class="secondary" id="btn-cancel-edit">Cancel</button>
+        <button type="submit" class="primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add camera (manual entry) modal -->
+<div class="modal-backdrop" id="create-modal">
+  <div class="modal">
+    <h2>Add camera manually</h2>
+    <div class="hint" style="margin-bottom:14px;">
+      For a camera that isn't in the sandbox catalogue. It's assigned an id like
+      <code>manual-1</code> so a future catalogue sync can never collide with or overwrite it.
+      A stream URL is optional — you can register the camera now and add RTSP/HLS/WebRTC later via Edit.
+    </div>
+    <form id="create-form">
+      <div class="field">
+        <label>Name *</label>
+        <input name="name" required placeholder="e.g. Chowk Junction Camera 2">
+      </div>
+      <div class="field">
+        <label>Location *</label>
+        <input name="location_text" required placeholder="e.g. Near Chowk Junction, Bhavnagar">
+      </div>
+      <div class="field">
+        <label>RTSP URL <span class="hint" style="display:inline">(optional)</span></label>
+        <input name="rtsp_url" placeholder="rtsp://...">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>HLS URL <span class="hint" style="display:inline">(optional)</span></label>
+          <input name="hls_url" placeholder="https://.../index.m3u8">
+        </div>
+        <div class="field">
+          <label>WebRTC URL <span class="hint" style="display:inline">(optional)</span></label>
+          <input name="webrtc_url" placeholder="https://.../whep">
+        </div>
+      </div>
+      <div class="field">
+        <label>Department</label>
+        <select name="department">
+          <option value="">—</option>
+          <option>Health</option><option>Police</option><option>GSRTC</option>
+          <option>Panchayat</option><option>Municipal</option>
+        </select>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Ownership</label>
+          <select name="ownership">
+            <option value="">—</option>
+            <option value="government">government</option>
+            <option value="private">private</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Camera type</label>
+          <select name="camera_type">
+            <option value="">—</option>
+            <option value="fixed">fixed</option>
+            <option value="ptz">ptz</option>
+            <option value="analog">analog</option>
+            <option value="ip">ip</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Connectivity</label>
+        <input name="connectivity" placeholder="e.g. fiber, 4G, unknown">
+      </div>
+      <div class="field">
+        <label>Storage location</label>
+        <input name="storage_location" placeholder="where footage actually lives">
+      </div>
+      <div class="field">
+        <label>Retention (days)</label>
+        <input name="retention_days" type="number" min="0">
+      </div>
+      <div class="field">
+        <label>Metadata confidence</label>
+        <select name="metadata_confidence">
+          <option value="">—</option>
+          <option value="confirmed">confirmed</option>
+          <option value="inferred">inferred</option>
+        </select>
+        <div class="hint">Set "inferred" if department/ownership was guessed rather than a real source.</div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Latitude</label>
+          <input name="latitude" type="number" step="0.000001" id="create-lat-input">
+        </div>
+        <div class="field">
+          <label>Longitude</label>
+          <input name="longitude" type="number" step="0.000001" id="create-lng-input">
+        </div>
+      </div>
+      <div class="hint">Setting both lat/lng marks geocode confidence as "exact". Click the map or drag the pin to set them instead of typing.</div>
+      <div class="field">
+        <div id="create-map" class="location-picker"></div>
+        <div class="hint">Click anywhere on the map to place/move the pin.</div>
+      </div>
+      <div class="actions">
+        <button type="button" class="secondary" id="btn-cancel-create">Cancel</button>
+        <button type="submit" class="primary">Add camera</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
