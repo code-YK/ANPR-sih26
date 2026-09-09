@@ -42,7 +42,9 @@
   <table>
     <tr>
       <th>#</th><th>Source timestamp</th><th>Camera</th><th>Department</th>
-      <th>Location</th><th>Coordinates</th><th>Confidence</th><th>Alert</th><th>Evidence</th>
+      <th>Location</th><th>Coordinates</th><th>Confidence</th>
+      <th>Onward</th><th>Min avg speed</th><th>Flags</th>
+      <th>Alert</th><th>Evidence</th>
     </tr>
     {% for s in report.stops %}
     <tr>
@@ -59,6 +61,24 @@
         {% endif %}
       </td>
       <td>{{ '%.2f'|format(s.confidence) if s.confidence is not none else '—' }}</td>
+      <td>
+        {% if s.movement and s.movement.compass %}
+          {{ s.movement.compass }} ({{ '%.0f'|format(s.movement.bearing_deg) }}&deg;),
+          {{ '%.2f'|format(s.movement.distance_km) }} km
+        {% elif s.movement %}
+          <span class="empty">not derivable</span>
+        {% else %}
+          <span class="empty">&mdash;</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if s.movement and s.movement.min_avg_speed_kmh is not none %}
+          &ge; {{ '%.0f'|format(s.movement.min_avg_speed_kmh) }} km/h
+        {% else %}
+          <span class="empty">&mdash;</span>
+        {% endif %}
+      </td>
+      <td>{{ s.anomaly_flags|join(', ') if s.anomaly_flags else '—' }}</td>
       <td>
         {% if s.alert_status %}
           <span class="badge badge-{{ s.alert_status }}">{{ s.alert_status }}</span>
@@ -78,6 +98,15 @@
     Evidence column shows the authenticated API path for each sighting's evidence crop, where retained --
     not a public link. Restricted stops (on cameras outside this viewer's authorised departments) are
     counted above but not listed by row.
+  </p>
+  <p class="note">
+    Onward direction is the straight-line bearing from one camera to the next, not a measured heading at
+    the camera. Min avg speed is a lower bound: the road distance between two cameras is at least the
+    straight-line distance, so the vehicle cannot have averaged less than the figure shown -- it is not
+    the vehicle's speed and must not be read as one. No camera in this registry is calibrated, so speed
+    at a single camera is not derivable at all. Both are shown only where both endpoint cameras are
+    exactly geocoded; {{ report.unpositioned_legs }} leg(s) could not be positioned and are marked
+    "not derivable".
   </p>
 </body>
 </html>

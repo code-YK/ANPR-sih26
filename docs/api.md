@@ -399,6 +399,51 @@ The plate values below are synthetic contract examples, not observed vehicle ide
 | `GET` | `/vehicles/{normalised_plate}/journey` | Ordered, GIS-ready movement history. |
 | `GET` | `/vehicles/{normalised_plate}/journey/export` | Reconciled report export. |
 
+### Traffic-flow analytics
+
+All department-scoped, all bounded to a maximum 7-day window (default 24 h).
+Scoping is applied inside each aggregate query, before grouping, so a count
+never spans departments the caller cannot see.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/traffic/movement` | Corridor legs, first/last observed node pairs, route anomalies, and the exclusions behind them. |
+| `GET` | `/traffic/flow` | Time-bucketed plate reads and vehicles tracked, per camera. |
+| `GET` | `/traffic/congestion` | Each camera's latest hour against its own recent median. |
+| `GET` | `/traffic/read-yield` | Plate reads over vehicles tracked, per camera. |
+| `GET` | `/traffic/export` | `format=json\|csv\|html\|pdf`, one builder for all four. |
+
+Derivation limits, enforced in `app/services/traffic_analytics.py` and stated
+in every response and export:
+
+- **No camera in the registry is calibrated** — no homography, pixels-per-metre,
+  mounting height, or field of view, and some cameras are PTZ. Speed *at* a
+  camera and heading *at* a camera are therefore not derivable and are absent
+  from the contract rather than approximated.
+- `min_avg_speed_kmh` is a **lower bound**, not a speed: road distance is at
+  least the great-circle distance, so a vehicle cannot have averaged less. It
+  is never a speeding finding. A leg exceeding the implausible-speed threshold
+  is reported as a **data fault** (one plate string misread across two
+  vehicles, or a clock/anchor fault).
+- `bearing_deg`/`compass` are the chord bearing between two camera points —
+  the onward direction between two observations, not a heading.
+- Both are suppressed unless **both** endpoint cameras are `exact`-geocoded and
+  the leg clears the separation and time floors. Suppressed legs are counted in
+  `exclusions`, never dropped silently.
+- Origin/destination pairs are named `first_camera_id`/`last_camera_id`
+  deliberately: they are the ends of the *observed* portion of a trip.
+- Sightings are written once per track and only on a confirmed plate, so every
+  count is a floor on real traffic. `/traffic/read-yield` publishes the measured
+  ratio against `analytics_counts` (`mode="vehicle"`) rather than leaving the
+  undercount as a disclaimer.
+- Same-camera repeats **across** an `epoch_id` boundary are replay or reconnect,
+  not dwell, and are excluded with a count — the sandbox serves looping footage.
+
+`GET /vehicles/{plate}/journey` and its export carry the same derivation as
+additive fields (`movement`, `anomaly_flags`, `unpositioned_legs`) from the same
+service, so the journey screen and the traffic report cannot disagree about the
+same two sightings.
+
 ### Operations
 
 | Method | Path | Purpose |

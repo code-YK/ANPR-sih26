@@ -98,3 +98,6 @@ Thumbs.db
 desktop.ini
 .idea/
 .vscode/
+
+# mediamtx auto-generated TLS material (regenerated on each start)
+*.crt

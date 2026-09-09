@@ -25,14 +25,54 @@ function fmtGap(fromIso, toIso) {
   return `${hours}h ${minutes % 60}m later`;
 }
 
+// The onward leg departing a stop. Direction is a straight-line bearing
+// between two cameras, and the speed is a LOWER bound -- the road distance
+// is at least the straight-line distance, so the vehicle cannot have
+// averaged less. Rendered with a leading ">=" for exactly that reason: no
+// camera here is calibrated, so this must never read as "the speed".
+function fmtMovement(movement) {
+  if (!movement) return null;
+  if (movement.compass == null) return "direction not derivable between these cameras";
+  const parts = [`→ ${movement.compass}`];
+  if (movement.distance_km != null) parts.push(`${movement.distance_km.toFixed(2)} km`);
+  if (movement.min_avg_speed_kmh != null) {
+    parts.push(`≥ ${Math.round(movement.min_avg_speed_kmh)} km/h`);
+  }
+  return parts.join(" · ");
+}
+
+const ANOMALY_LABELS = {
+  dwell: ["lingered", "Stationary or circling at this camera, within one unbroken stream epoch"],
+  loop: ["returned", "Came back to a camera already passed on this trip"],
+  implausible_speed: [
+    "check data",
+    "Transit too fast to be real — likely one plate string misread across two vehicles, or a clock fault",
+  ],
+};
+
+function anomalyChips(flags) {
+  return flags.map((flag) => {
+    const [label, title] = ANOMALY_LABELS[flag] ?? [flag, flag];
+    return (
+      <span key={flag} className="badge badge-warn" title={title}>
+        {label}
+      </span>
+    );
+  });
+}
+
 function toCsv(journey) {
   const header = [
     "seq", "seen_at", "camera_id", "camera_name", "location_text", "department",
     "confidence", "vehicle_type", "latitude", "longitude", "geocode_confidence",
+    "onward_compass", "onward_bearing_deg", "onward_distance_km",
+    "onward_min_avg_speed_kmh", "anomaly_flags",
   ];
   const rows = journey.stops.map((s, i) => [
     i + 1, s.seen_at, s.camera_id, s.camera_name, s.location_text, s.department ?? "",
     s.confidence ?? "", s.vehicle_type ?? "", s.latitude ?? "", s.longitude ?? "", s.geocode_confidence ?? "",
+    s.movement?.compass ?? "", s.movement?.bearing_deg ?? "", s.movement?.distance_km ?? "",
+    s.movement?.min_avg_speed_kmh ?? "", (s.anomaly_flags ?? []).join(" "),
   ]);
   return [header, ...rows]
     .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
@@ -145,6 +185,14 @@ export default function JourneyView() {
             </p>
           )}
 
+          {journey.unpositioned_legs > 0 && (
+            <p className="hint">
+              Direction and speed are shown only between exactly-geocoded cameras.{" "}
+              {journey.unpositioned_legs} leg(s) could not be positioned, so the vehicle
+              was seen to move but the movement cannot be measured.
+            </p>
+          )}
+
           {journey.stops.length > 0 && (
             <>
               <div className="journey-layout">
@@ -163,9 +211,19 @@ export default function JourneyView() {
                     {journey.stops.map((s, i) => (
                       <Fragment key={s.sighting_id}>
                         {i > 0 && (
-                          <tr className="timeline-gap" aria-hidden="true">
+                          // Not aria-hidden: this connector now carries the
+                          // direction and minimum speed of the leg, which is
+                          // real content, not a decorative separator.
+                          <tr className="timeline-gap">
                             <td />
-                            <td colSpan={5}>{fmtGap(journey.stops[i - 1].seen_at, s.seen_at)}</td>
+                            <td colSpan={5}>
+                              {fmtGap(journey.stops[i - 1].seen_at, s.seen_at)}
+                              {fmtMovement(journey.stops[i - 1].movement) && (
+                                <span className="timeline-movement">
+                                  {" · "}{fmtMovement(journey.stops[i - 1].movement)}
+                                </span>
+                              )}
+                            </td>
                           </tr>
                         )}
                       <tr
@@ -175,7 +233,12 @@ export default function JourneyView() {
                       >
                         <td>{i + 1}</td>
                         <td>{fmtTime(s.seen_at)}</td>
-                        <td>{s.camera_name}</td>
+                        <td>
+                          {s.camera_name}
+                          {s.anomaly_flags?.length > 0 && (
+                            <span className="anomaly-chips">{anomalyChips(s.anomaly_flags)}</span>
+                          )}
+                        </td>
                         <td>{s.location_text}</td>
                         <td>{s.department ?? "—"}</td>
                         <td>

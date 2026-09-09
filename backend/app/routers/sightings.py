@@ -32,8 +32,10 @@ from app.schemas import (
     SightingCreate,
     SightingIngestResult,
     SightingOut,
+    StopMovement,
     VehicleJourney,
 )
+from app.services.traffic_analytics import annotate_journey
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -193,6 +195,36 @@ async def get_sighting_evidence(
     return FileResponse(path, media_type="image/jpeg")
 
 
+def _journey_movement(rows):
+    """Annotate (Sighting, Camera) pairs with onward direction and speed.
+
+    Delegates to the same service the traffic report uses, so the journey
+    screen and the aggregate report can never disagree about the same two
+    sightings.
+    """
+    sightings = [sighting for sighting, _camera in rows]
+    cameras = {camera.camera_id: camera for _sighting, camera in rows}
+    return annotate_journey(sightings, cameras)
+
+
+def _to_movement(annotation) -> StopMovement | None:
+    """None only when there is no onward leg at all (the final stop, or a
+    trip break). A leg that exists but could not be positioned still returns
+    a StopMovement carrying the elapsed time with null direction/speed --
+    "we saw the move but cannot measure it" is a different statement from
+    "there was no move", and the UI renders them differently.
+    """
+    if annotation.gap_seconds is None:
+        return None
+    return StopMovement(
+        bearing_deg=annotation.bearing_deg,
+        compass=annotation.compass,
+        distance_km=annotation.distance_km,
+        gap_seconds=annotation.gap_seconds,
+        min_avg_speed_kmh=annotation.min_avg_speed_kmh,
+    )
+
+
 @router.get("/vehicles/{plate}/journey", response_model=VehicleJourney)
 async def vehicle_journey(
     plate: str,
@@ -216,10 +248,12 @@ async def vehicle_journey(
     rows = all_rows if allowed is None else [(s, c) for s, c in all_rows if c.department in allowed]
     restricted = len(all_rows) - len(rows)
 
+    annotations, exclusions = _journey_movement(rows)
+
     stops: list[JourneyStop] = []
     camera_ids: set[str] = set()
     unplaced = 0
-    for sighting, camera in rows:
+    for index, (sighting, camera) in enumerate(rows):
         camera_ids.add(camera.camera_id)
         if camera.latitude is None or camera.longitude is None:
             unplaced += 1
@@ -238,6 +272,8 @@ async def vehicle_journey(
                 vehicle_type=sighting.vehicle_type,
                 epoch_id=sighting.epoch_id,
                 has_evidence=sighting.has_evidence,
+                movement=_to_movement(annotations[index]),
+                anomaly_flags=annotations[index].flags,
             )
         )
 
@@ -250,6 +286,7 @@ async def vehicle_journey(
         stops=stops,
         unplaced_stops=unplaced,
         restricted_stops=restricted,
+        unpositioned_legs=exclusions.legs_unpositioned,
     )
 
 
@@ -289,6 +326,8 @@ async def build_journey_export(session: AsyncSession, auth: AuthContext, plate: 
         for sighting_id, alert_id, status in alert_rows:
             alerts_by_sighting.setdefault(sighting_id, (alert_id, status))
 
+    annotations, exclusions = _journey_movement(rows)
+
     stops: list[JourneyExportStop] = []
     camera_ids: set[str] = set()
     unplaced = 0
@@ -296,6 +335,7 @@ async def build_journey_export(session: AsyncSession, auth: AuthContext, plate: 
         camera_ids.add(camera.camera_id)
         if camera.latitude is None or camera.longitude is None:
             unplaced += 1
+        annotation = annotations[sequence - 1]
         alert_id, alert_status = alerts_by_sighting.get(sighting.id, (None, None))
         stops.append(
             JourneyExportStop(
@@ -313,6 +353,8 @@ async def build_journey_export(session: AsyncSession, auth: AuthContext, plate: 
                 evidence_url=f"/api/sightings/{sighting.id}/evidence" if sighting.has_evidence else None,
                 alert_id=alert_id,
                 alert_status=alert_status,
+                movement=_to_movement(annotation),
+                anomaly_flags=annotation.flags,
             )
         )
 
@@ -326,6 +368,7 @@ async def build_journey_export(session: AsyncSession, auth: AuthContext, plate: 
         unplaced_stops=unplaced,
         restricted_stops=restricted,
         stops=stops,
+        unpositioned_legs=exclusions.legs_unpositioned,
     )
 
 
@@ -356,17 +399,26 @@ async def vehicle_journey_export(
             "sequence", "seen_at", "camera_id", "camera_name", "department",
             "location_text", "latitude", "longitude", "geocode_confidence",
             "confidence", "evidence_url", "alert_id", "alert_status",
+            "onward_compass", "onward_bearing_deg", "onward_distance_km",
+            "onward_min_avg_speed_kmh", "anomaly_flags",
         ])
         for stop in report.stops:
             # Match Pydantic's own JSON datetime serialisation (trailing Z,
             # not +00:00) so a byte-for-byte diff of the two export formats
             # doesn't false-positive on an aware-datetime formatting choice.
             seen_at_iso = stop.seen_at.isoformat().replace("+00:00", "Z")
+            movement = stop.movement
             writer.writerow([
                 stop.sequence, seen_at_iso, stop.camera_id, stop.camera_name,
                 stop.department or "", stop.location_text, stop.latitude, stop.longitude,
                 stop.geocode_confidence or "", stop.confidence, stop.evidence_url or "",
                 stop.alert_id or "", stop.alert_status or "",
+                (movement.compass or "") if movement else "",
+                (movement.bearing_deg if movement and movement.bearing_deg is not None else ""),
+                (movement.distance_km if movement and movement.distance_km is not None else ""),
+                (movement.min_avg_speed_kmh
+                 if movement and movement.min_avg_speed_kmh is not None else ""),
+                " ".join(stop.anomaly_flags),
             ])
         return Response(
             content=output.getvalue(),
