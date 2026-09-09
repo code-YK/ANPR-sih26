@@ -18,6 +18,17 @@ datetime.now()). If a stream is never successfully anchored (every playlist
 fetch failed), seen_at is sent as null and the backend rejects the sighting
 rather than inventing a timestamp.
 
+Alongside sightings this also POSTs a periodic vehicle count to
+/api/analytics/counts with mode="vehicle", exactly as
+person_observation_worker.py does for people. The two report different
+things and both are needed: a sighting fires once per track and only on a
+CONFIRMED plate, so sightings systematically undercount traffic -- every
+vehicle whose plate was never readable (angle, glare, dirt, motorcycle at
+distance) is invisible in that stream. The count is every tracked vehicle
+regardless of plate readability. Holding both lets the backend report the
+per-camera read yield (sightings/unique_tracks) instead of presenting a
+plate-conditioned undercount as though it were traffic volume.
+
 Usage:
     python observation_worker.py --camera-id 21 --report-to http://127.0.0.1:8000
     python observation_worker.py --camera-id 21 --report-to http://127.0.0.1:8000 --duration 300
@@ -55,6 +66,9 @@ def parse_args():
                         help="Backend base URL, e.g. http://127.0.0.1:8000")
     parser.add_argument("--duration", type=float, default=0.0,
                         help="Stop after this many seconds (0 = run until killed)")
+    parser.add_argument("--window-seconds", type=float, default=30.0,
+                        help="Aggregation window before posting a vehicle count "
+                             "(default: 30). Matches person_observation_worker.")
     parser.add_argument("--open-timeout", type=float, default=60.0,
                         help="Seconds to wait for the stream to open (default: 60)")
     parser.add_argument("--no-reconnect", action="store_true",
@@ -76,8 +90,8 @@ def parse_args():
     return args
 
 
-def post_sighting(report_to, payload):
-    """POST one sighting to the backend. Returns the parsed response dict, or
+def _post_json(report_to, path, payload, tag):
+    """POST one payload to the backend. Returns the parsed response dict, or
     None on failure (logged, never raised -- a dropped report should not kill
     a worker that is otherwise tracking fine)."""
     data = json.dumps(payload).encode("utf-8")
@@ -86,7 +100,7 @@ def post_sighting(report_to, payload):
     if worker_token:
         headers["X-Sentinel-Worker-Token"] = worker_token
     req = urllib.request.Request(
-        report_to.rstrip("/") + "/api/sightings",
+        report_to.rstrip("/") + path,
         data=data,
         headers=headers,
         method="POST",
@@ -96,10 +110,20 @@ def post_sighting(report_to, payload):
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
-        print(f"  [sightings] POST rejected: {e.code} {body[:300]}")
+        print(f"  [{tag}] POST rejected: {e.code} {body[:300]}")
     except Exception as e:
-        print(f"  [sightings] POST failed: {e}")
+        print(f"  [{tag}] POST failed: {e}")
     return None
+
+
+def post_sighting(report_to, payload):
+    """POST one confirmed-plate sighting."""
+    return _post_json(report_to, "/api/sightings", payload, "sightings")
+
+
+def post_count(report_to, payload):
+    """POST one window's vehicle-count aggregate."""
+    return _post_json(report_to, "/api/analytics/counts", payload, "counts")
 
 
 def confirmed_confidence(plate_reader, track_id, text):
@@ -177,7 +201,9 @@ def main():
     print(f"[Worker] Model:   {args.model}")
     print(f"[Worker] Tracker: {args.tracker}")
     print(f"[Worker] Device:  {device} (fp16={half}, imgsz={args.imgsz})")
+    print(f"[Worker] Window:  {args.window_seconds:.0f}s")
     print(f"[Worker] Report:  {args.report_to}/api/sightings")
+    print(f"[Worker] Counts:  {args.report_to}/api/analytics/counts (mode=vehicle)")
 
     model = YOLO(args.model)
 
@@ -211,6 +237,35 @@ def main():
     deadline = time.time() + args.duration if args.duration > 0 else None
     accepted_alerts = 0
 
+    window_track_ids = set()
+    window_peak = 0
+    window_start_seen_at = None
+    next_flush_at = time.time() + args.window_seconds
+    windows_posted = 0
+
+    def flush(end_seen_at):
+        nonlocal window_track_ids, window_peak, window_start_seen_at, windows_posted
+        # A window with zero vehicles is a real measurement (the camera was
+        # watched and the road was empty), not a gap -- post it. Only skip
+        # when the window never got a valid time anchor, i.e. the stream
+        # never delivered an anchored frame in this window.
+        if window_start_seen_at is None or end_seen_at is None:
+            window_track_ids, window_peak, window_start_seen_at = set(), 0, None
+            return
+        payload = {
+            "camera_id": args.camera_id,
+            "mode": "vehicle",
+            "window_start": window_start_seen_at.isoformat(),
+            "window_end": end_seen_at.isoformat(),
+            "unique_tracks": len(window_track_ids),
+            "peak_concurrent": window_peak,
+        }
+        response = post_count(args.report_to, payload)
+        if response is not None:
+            windows_posted += 1
+            print(f"  [window] {len(window_track_ids)} unique, {window_peak} peak -> counts {response.get('id')}")
+        window_track_ids, window_peak, window_start_seen_at = set(), 0, None
+
     print("-" * 50)
     try:
         while True:
@@ -230,6 +285,11 @@ def main():
                 elif time.time() - stall_since > reader.stall_timeout:
                     print("[Worker] Stream stalled; giving up.")
                     break
+                # Keep posting windows through a stall so a gap in the count
+                # series means "camera not watched", not "worker busy".
+                if time.time() >= next_flush_at:
+                    flush(reader.last_seen_at)
+                    next_flush_at = time.time() + args.window_seconds
                 continue
 
             if stall_since is not None:
@@ -249,6 +309,17 @@ def main():
                 )
             result = results[0]
             boxes, track_ids, class_ids, confs = tc.unpack_tracks(result)
+
+            # Count every tracked vehicle, before any plate gate -- this is
+            # the denominator the sighting count is measured against.
+            if window_start_seen_at is None and seen_at is not None:
+                window_start_seen_at = seen_at
+            window_track_ids.update(track_ids)
+            window_peak = max(window_peak, len(track_ids))
+
+            if time.time() >= next_flush_at:
+                flush(seen_at)
+                next_flush_at = time.time() + args.window_seconds
 
             plate_reader.read_vehicles(frame, boxes, track_ids, timing.frames, args.plate_every)
 
@@ -279,6 +350,9 @@ def main():
                     "resyncs": reader.resyncs,
                     "plates_reported": len(reported_tracks),
                     "alerts_raised": accepted_alerts,
+                    "windows_posted": windows_posted,
+                    "window_unique_tracks": len(window_track_ids),
+                    "window_peak": window_peak,
                     "time_anchored": seen_at is not None,
                     "source_transport": reader.transport,
                     # How many already-decoded frames are queued waiting for
@@ -356,6 +430,7 @@ def main():
     except KeyboardInterrupt:
         print("\n[Worker] Interrupted.")
     finally:
+        flush(reader.last_seen_at)
         reader.stop()
         # A snapshot left behind by a dead worker would show a stopped
         # detector as if it were still watching.
@@ -364,6 +439,7 @@ def main():
     timing.report("Worker")
     print(f"  Plates reported: {len(reported_tracks)}")
     print(f"  Alerts raised:   {accepted_alerts}")
+    print(f"  Windows posted:  {windows_posted}")
 
 
 if __name__ == "__main__":
