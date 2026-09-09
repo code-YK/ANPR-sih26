@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sentinel Traffic Movement Report</title>
+<style>
+  @page { size: A4 landscape; margin: 1.5cm; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; font-size: 11pt; }
+  h1 { font-size: 20pt; margin-bottom: 0; }
+  .subtitle { color: #666; margin-top: 4px; margin-bottom: 24px; font-size: 10pt; }
+  h2 { font-size: 14pt; border-bottom: 2px solid #1a1a1a; padding-bottom: 4px; margin-top: 32px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 9pt; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #ddd; vertical-align: top; }
+  tr { page-break-inside: avoid; break-inside: avoid; }
+  thead { display: table-header-group; }
+  th { background: #f2f2f2; }
+  .stat-row { display: flex; gap: 24px; margin: 12px 0; }
+  .stat .n { font-size: 20pt; font-weight: 700; }
+  .stat .label { color: #666; font-size: 9pt; }
+  .empty { color: #888; font-style: italic; }
+  .flag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 8.5pt;
+          background: #fff4e5; color: #8a5200; }
+  .note { color: #555; font-size: 9pt; margin-top: 20px; border-top: 1px solid #ddd; padding-top: 10px; }
+  .mono { font-family: "SF Mono", Consolas, monospace; }
+</style>
+</head>
+<body>
+  <h1>Traffic movement report</h1>
+  <div class="subtitle">
+    {{ report.window_start.strftime('%Y-%m-%d %H:%M') }} to
+    {{ report.window_end.strftime('%Y-%m-%d %H:%M UTC') }}
+    &mdash; generated {{ report.generated_at.strftime('%Y-%m-%d %H:%M UTC') }}
+  </div>
+
+  <div class="stat-row">
+    <div class="stat"><div class="n">{{ report.total_sightings }}</div><div class="label">sightings</div></div>
+    <div class="stat"><div class="n">{{ report.total_plates }}</div><div class="label">distinct plates</div></div>
+    <div class="stat"><div class="n">{{ report.total_trips }}</div><div class="label">trips</div></div>
+    <div class="stat"><div class="n">{{ report.legs|length }}</div><div class="label">corridor legs</div></div>
+    <div class="stat"><div class="n">{{ report.anomalies|length }}</div><div class="label">anomalies</div></div>
+  </div>
+
+  <h2>Corridor legs</h2>
+  {% if report.legs %}
+  <table>
+    <thead>
+      <tr>
+        <th>Plate</th><th>From</th><th>To</th><th>Departed</th>
+        <th>Elapsed</th><th>Distance</th><th>Onward</th><th>Min avg speed</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for leg in report.legs %}
+      <tr>
+        <td class="mono">{{ leg.plate }}</td>
+        <td>{{ leg.from_name }}</td>
+        <td>{{ leg.to_name }}</td>
+        <td>{{ leg.departed_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        <td>{{ '%.0f'|format(leg.gap_seconds) }}s</td>
+        <td>
+          {% if leg.distance_km is not none %}{{ '%.2f'|format(leg.distance_km) }} km
+          {% else %}<span class="empty">not derivable</span>{% endif %}
+        </td>
+        <td>
+          {% if leg.compass %}{{ leg.compass }} ({{ '%.0f'|format(leg.bearing_deg) }}&deg;)
+          {% else %}<span class="empty">&mdash;</span>{% endif %}
+        </td>
+        <td>
+          {% if leg.min_avg_speed_kmh is not none %}
+            &ge; {{ '%.0f'|format(leg.min_avg_speed_kmh) }} km/h
+            {% if leg.implausible %}<span class="flag">implausible</span>{% endif %}
+          {% else %}<span class="empty">&mdash;</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No movements in this window.</p>
+  {% endif %}
+
+  <h2>First and last observed nodes</h2>
+  {% if report.od_pairs %}
+  <table>
+    <thead><tr><th>First observed</th><th>Last observed</th><th>Trips</th></tr></thead>
+    <tbody>
+    {% for pair in report.od_pairs %}
+      <tr>
+        <td>{{ pair.first_name }}</td>
+        <td>{{ pair.last_name }}</td>
+        <td>{{ pair.trip_count }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No completed trips in this window.</p>
+  {% endif %}
+
+  <h2>Route anomalies</h2>
+  {% if report.anomalies %}
+  <table>
+    <thead><tr><th>Observed</th><th>Kind</th><th>Plate</th><th>Camera</th><th>Detail</th></tr></thead>
+    <tbody>
+    {% for anomaly in report.anomalies %}
+      <tr>
+        <td>{{ anomaly.observed_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        <td><span class="flag">{{ anomaly.kind }}</span></td>
+        <td class="mono">{{ anomaly.plate }}</td>
+        <td>{{ anomaly.camera_name }}</td>
+        <td>{{ anomaly.detail }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No anomalies in this window.</p>
+  {% endif %}
+
+  <h2>What this report excludes</h2>
+  <table>
+    <tbody>
+      <tr><td>Legs where an endpoint camera is not exactly geocoded</td>
+          <td>{{ report.exclusions.legs_unpositioned }}</td></tr>
+      <tr><td>Legs shorter than the separation floor</td>
+          <td>{{ report.exclusions.legs_below_separation_floor }}</td></tr>
+      <tr><td>Legs shorter than the time floor</td>
+          <td>{{ report.exclusions.legs_below_time_floor }}</td></tr>
+      <tr><td>Trips with a single sighting (no movement to measure)</td>
+          <td>{{ report.exclusions.single_sighting_trips }}</td></tr>
+      <tr><td>Same-camera repeats across a stream epoch (replay or reconnect, not dwell)</td>
+          <td>{{ report.exclusions.cross_epoch_repeats }}</td></tr>
+      <tr><td>Result truncated at the row cap</td>
+          <td>{{ 'yes' if report.exclusions.sightings_truncated else 'no' }}</td></tr>
+    </tbody>
+  </table>
+
+  <p class="note">
+    <strong>How to read these figures.</strong>
+    Trips were split on an idle gap of {{ '%.0f'|format(report.trip_gap_minutes) }} minutes.
+    Onward direction is the straight-line bearing from one camera to the next, not a measured
+    heading at the camera. Minimum average speed is a lower bound: the road distance between two
+    cameras is at least the straight-line distance, so a vehicle cannot have averaged less than
+    the figure shown. It is not the vehicle's speed and must not be used as one &mdash; no camera
+    in this registry is calibrated, so speed at a single camera is not derivable at all.
+    A leg flagged <em>implausible</em> indicates a data fault, most often one plate string misread
+    across two vehicles, and never a speeding finding.
+  </p>
+  <p class="note">
+    Sightings are written once per vehicle track and only once a plate is confirmed, so this
+    report covers plate-readable traffic, not all traffic. Cameras outside the requesting user's
+    authorised departments are excluded before any figure above is computed.
+    First and last observed nodes are the ends of the observed portion of a trip, which begins and
+    ends wherever cameras happen to be &mdash; they are not the journey's true origin and destination.
+  </p>
+</body>
+</html>

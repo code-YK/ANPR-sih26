@@ -17,6 +17,7 @@ import InvestigateView from "./views/Investigate/InvestigateView.jsx";
 import JourneyView from "./views/Journey/JourneyView.jsx";
 import LiveView from "./views/Live/LiveView.jsx";
 import RegistryView from "./views/Registry/RegistryView.jsx";
+import TrafficView from "./views/Traffic/TrafficView.jsx";
 import WatchlistView from "./views/Watchlist/WatchlistView.jsx";
 
 function navClass({ isActive }) {
@@ -53,6 +54,7 @@ function AuthenticatedApp() {
                   Alerts <AlertsNavBadge />
                 </NavLink>
                 <NavLink to="/journey" className={navClass}>Journey</NavLink>
+                <NavLink to="/traffic" className={navClass}>Traffic</NavLink>
                 <NavLink to="/investigate" className={navClass}>Investigate</NavLink>
                 <NavLink to="/watchlist" className={navClass}>Watchlist</NavLink>
                 <NavLink to="/registry" className={navClass}>Registry</NavLink>
@@ -74,6 +76,7 @@ function AuthenticatedApp() {
                 <Route path="/alerts/*" element={<AlertsView />} />
                 <Route path="/journey" element={<JourneyView />} />
                 <Route path="/journey/:plate" element={<JourneyView />} />
+                <Route path="/traffic" element={<TrafficView />} />
                 <Route path="/investigate/*" element={<InvestigateView />} />
                 <Route path="/watchlist" element={<WatchlistView />} />
                 <Route path="/registry/*" element={<RegistryView />} />

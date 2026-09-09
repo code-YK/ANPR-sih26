@@ -25,6 +25,7 @@ from app.routers import (
     logs,
     pipeline,
     sightings,
+    traffic,
     watchlist,
     webrtc,
 )
@@ -128,6 +129,7 @@ app.include_router(sightings.router, prefix="/api", tags=["sightings"])
 app.include_router(watchlist.router, prefix="/api", tags=["watchlist"])
 app.include_router(alerts.router, prefix="/api", tags=["alerts"])
 app.include_router(analytics.router, prefix="/api", tags=["analytics"])
+app.include_router(traffic.router, prefix="/api", tags=["traffic"])
 app.include_router(hls_proxy.router, prefix="/api", tags=["hls-proxy"])
 app.include_router(webrtc.router, prefix="/api", tags=["webrtc"])
 app.include_router(investigate.router, prefix="/api", tags=["investigate"])

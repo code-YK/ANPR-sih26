@@ -679,6 +679,20 @@ tr.row-hover td { background: var(--accent-bg); }
 }
 .timeline-gap:hover td { background: none; }
 
+/* Onward direction and minimum speed, sharing the connector with the
+   elapsed time. One step brighter than the interval because it is a
+   measurement rather than arithmetic on two visible timestamps, but still
+   quieter than a stop row -- it describes the space between stops. */
+.timeline-movement { color: var(--haze-300); }
+
+/* Dwell/loop/data-fault marks sit beside the camera name. These are urgency
+   marks, not certainty marks, so they take colour (badge-warn) rather than
+   texture -- see DESIGN.md §3. */
+.anomaly-chips {
+  display: inline-flex; gap: var(--sp-1); margin-left: var(--sp-2);
+  vertical-align: middle;
+}
+
 /* Marker fill uses --entity (a journey stop is a clickable point in a
    plate's identity trail); the active stop brightens rather than turning
    red, since being selected isn't an urgent state -- see DESIGN.md §4. The
@@ -967,3 +981,42 @@ meter { color-scheme: dark; }
 .logs-dim { color: var(--muted); }
 .log-error { color: var(--bad); }
 .log-warn { color: var(--warn); }
+
+/* ---------------------------------------------------------------------
+   Traffic analytics
+   Magnitude is length or position, never hue -- colour in this console
+   means urgency and nothing else (DESIGN.md §4), so a busy corridor and a
+   quiet one differ in bar length, not colour.
+   --------------------------------------------------------------------- */
+
+.sparkline { color: var(--haze-300); vertical-align: middle; display: inline-block; }
+
+.volume-bar {
+  display: inline-block; width: 60px; height: 6px; vertical-align: middle;
+  background: var(--ink-600); border-radius: 3px; overflow: hidden; margin-right: var(--sp-2);
+}
+.volume-bar-fill { display: block; height: 100%; background: var(--haze-400); }
+
+/* A corridor is a directed relationship, so the row reads as one phrase
+   rather than three columns: origin, the direction travelled, destination. */
+.corridor-route { line-height: 1.4; }
+.corridor-arrow {
+  font-family: var(--font-mono); color: var(--haze-400);
+  margin: 0 var(--sp-2); white-space: nowrap;
+}
+
+.plate-cell a {
+  font-family: var(--font-mono); letter-spacing: 0.04em; color: var(--entity);
+  text-decoration: none;
+}
+.plate-cell a:hover { color: var(--entity-bright); text-decoration: underline; }
+
+/* A value that is absent for a stated reason. Distinct from an urgent
+   state: not knowing something is not an alarm, so it recedes rather than
+   taking a colour. */
+.muted-value { color: var(--haze-400); font-style: italic; }
+
+.exclusion-list {
+  margin: var(--sp-2) 0 var(--sp-4); padding-left: var(--sp-5);
+  color: var(--haze-300); font-size: var(--fs-body); line-height: 1.7;
+}

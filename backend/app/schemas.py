@@ -452,6 +452,25 @@ class WatchlistBulkResult(BaseModel):
     results: list[WatchlistBulkRowResult]
 
 
+class StopMovement(BaseModel):
+    """Onward movement departing a stop, toward the next one.
+
+    Every field is null unless BOTH endpoint cameras are `exact`-geocoded and
+    the leg clears the separation/time floors -- an approximate geocode is a
+    place-name lookup that can be a kilometre out, which would dominate a
+    short leg. `min_avg_speed_kmh` is a LOWER bound: road distance is always
+    at least the straight-line distance, so the vehicle cannot have averaged
+    less than this. It is never "the speed" -- no camera here is calibrated,
+    so speed at a camera is not derivable at all.
+    """
+
+    bearing_deg: float | None = None
+    compass: str | None = None
+    distance_km: float | None = None
+    gap_seconds: float | None = None
+    min_avg_speed_kmh: float | None = None
+
+
 class JourneyStop(BaseModel):
     sighting_id: int
     camera_id: str
@@ -466,6 +485,10 @@ class JourneyStop(BaseModel):
     vehicle_type: str | None
     epoch_id: int
     has_evidence: bool = False
+    # Additive: absent on the final stop and wherever a trip breaks.
+    movement: StopMovement | None = None
+    # "dwell" | "loop" | "implausible_speed", attached to the arriving stop.
+    anomaly_flags: list[str] = Field(default_factory=list)
 
 
 class VehicleJourney(BaseModel):
@@ -482,6 +505,10 @@ class VehicleJourney(BaseModel):
     # Authorised users receive visible stops plus an explicit count of stops
     # omitted because their camera belongs to another department.
     restricted_stops: int = 0
+    # Legs whose direction/speed could not be derived because an endpoint
+    # camera is not exact-geocoded. Surfaced so a route that renders without
+    # direction reads as "not derivable here", not as "did not move".
+    unpositioned_legs: int = 0
 
 
 class JourneyExportStop(BaseModel):
@@ -507,6 +534,8 @@ class JourneyExportStop(BaseModel):
     evidence_url: str | None
     alert_id: int | None
     alert_status: str | None
+    movement: StopMovement | None = None
+    anomaly_flags: list[str] = Field(default_factory=list)
 
 
 class JourneyExportReport(BaseModel):
@@ -519,6 +548,10 @@ class JourneyExportReport(BaseModel):
     unplaced_stops: int
     restricted_stops: int
     stops: list[JourneyExportStop]
+    # Legs whose direction/speed could not be derived because an endpoint
+    # camera is not exact-geocoded. Reported so the omission is visible in
+    # the export rather than reading as "this vehicle did not move".
+    unpositioned_legs: int = 0
 
 
 class AlertOut(BaseModel):
@@ -576,8 +609,11 @@ class SuspiciousAlertCreate(BaseModel):
 
 
 class AnalyticsCountCreate(BaseModel):
-    """Posted periodically by a non-ANPR worker (person mode). Never a
-    substitute for `sightings` -- there is no plate/identity here."""
+    """Posted periodically by an analytics worker. `mode="person"` is never a
+    substitute for `sightings` -- there is no plate/identity here.
+    `mode="vehicle"` counts every tracked vehicle regardless of whether its
+    plate was readable, which is what makes it the honest denominator for
+    the confirmed-plate sightings from the same camera."""
 
     camera_id: str
     mode: str = "person"
@@ -838,3 +874,140 @@ class SubjectOut(BaseModel):
 
 class TrackLinkRequest(BaseModel):
     subject_id: int
+
+
+# --------------------------------------------------------------------------
+# Traffic-flow analytics
+#
+# Every quantity here is derived from two inputs only: a camera's geocoded
+# point and a sighting's anchored timestamp. No camera in this registry is
+# calibrated, so speed at a camera and heading at a camera are not derivable
+# and are deliberately absent. See app/services/traffic_analytics.py.
+# --------------------------------------------------------------------------
+
+
+class TrafficLegOut(BaseModel):
+    """One movement between two consecutive observations of a plate."""
+
+    plate: str
+    from_camera_id: str
+    to_camera_id: str
+    from_name: str
+    to_name: str
+    departed_at: datetime
+    arrived_at: datetime
+    gap_seconds: float
+    distance_km: float | None
+    bearing_deg: float | None
+    compass: str | None
+    # Lower bound, straight-line. Never "the speed" -- see the module note.
+    min_avg_speed_kmh: float | None
+    implausible: bool
+
+
+class OriginDestinationOut(BaseModel):
+    """A first-observed/last-observed camera pair. Deliberately NOT called
+    origin and destination: these are the ends of the observed portion of a
+    trip, which begins and ends wherever cameras happen to be."""
+
+    first_camera_id: str
+    last_camera_id: str
+    first_name: str
+    last_name: str
+    trip_count: int
+
+
+class RouteAnomalyOut(BaseModel):
+    kind: str = Field(description="dwell | loop | implausible_speed")
+    plate: str
+    camera_id: str
+    camera_name: str
+    detail: str
+    observed_at: datetime
+
+
+class TrafficExclusionsOut(BaseModel):
+    """What the figures above leave out, and why. Reported rather than
+    silently applied, so a small number never reads as a quiet dataset."""
+
+    legs_unpositioned: int = 0
+    legs_below_separation_floor: int = 0
+    legs_below_time_floor: int = 0
+    single_sighting_trips: int = 0
+    cross_epoch_repeats: int = 0
+    sightings_truncated: int = 0
+
+
+class TrafficMovementReport(BaseModel):
+    generated_at: datetime
+    window_start: datetime
+    window_end: datetime
+    # Echoed because no gap value is objectively correct, and a reader who
+    # cannot see the threshold cannot judge the trip counts.
+    trip_gap_minutes: float
+    total_sightings: int
+    total_plates: int
+    total_trips: int
+    legs: list[TrafficLegOut]
+    od_pairs: list[OriginDestinationOut]
+    anomalies: list[RouteAnomalyOut]
+    exclusions: TrafficExclusionsOut
+
+
+class TrafficFlowBucket(BaseModel):
+    bucket_start: datetime
+    camera_id: str
+    camera_name: str
+    department: str | None
+    # Distinct plates confirmed in this bucket. A floor on traffic, not a
+    # count of vehicles -- unreadable plates never become sightings.
+    plate_reads: int
+    # Every tracked vehicle, readable or not, from analytics_counts. None
+    # when the vehicle counter was not running on this camera.
+    vehicles_tracked: int | None
+
+
+class TrafficFlowReport(BaseModel):
+    generated_at: datetime
+    window_start: datetime
+    window_end: datetime
+    bucket_minutes: int
+    buckets: list[TrafficFlowBucket]
+
+
+class CameraReadYield(BaseModel):
+    """How much of a camera's traffic actually yields a plate. The honest
+    denominator for everything else on this screen."""
+
+    camera_id: str
+    camera_name: str
+    department: str | None
+    plate_reads: int
+    vehicles_tracked: int | None
+    # plate_reads / vehicles_tracked, or None when the vehicle counter was
+    # not running -- an unmeasured yield is not a zero yield.
+    read_yield: float | None
+
+
+class CameraCongestion(BaseModel):
+    """Current throughput against this camera's own recent median.
+
+    A comparison, never a forecast: with no flow ground truth and days of
+    history, a prediction here would be unfalsifiable.
+    """
+
+    camera_id: str
+    camera_name: str
+    department: str | None
+    current_vehicles: int | None
+    baseline_median: float | None
+    ratio: float | None
+    state: str = Field(description="busier | typical | quieter | unmeasured")
+
+
+class TrafficCongestionReport(BaseModel):
+    generated_at: datetime
+    window_start: datetime
+    window_end: datetime
+    baseline_hours: int
+    cameras: list[CameraCongestion]
