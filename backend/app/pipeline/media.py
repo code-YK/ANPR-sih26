@@ -26,6 +26,7 @@ import hashlib
 import json
 import logging
 import platform
+import subprocess
 from fractions import Fraction
 from pathlib import Path
 
@@ -71,18 +72,27 @@ async def probe_local_file(path: Path, *, timeout_seconds: float) -> dict:
         "-of", "json", str(path),
     ]
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        # asyncio.to_thread + a blocking subprocess.run, not
+        # asyncio.create_subprocess_exec: the latter needs the running
+        # loop's own subprocess support (ProactorEventLoop on Windows), and
+        # at least one real deployment ended up on SelectorEventLoop instead
+        # -- SelectorEventLoop does not implement it and raises a bare
+        # NotImplementedError with no message. investigate.py's person
+        # search already uses this exact to_thread(subprocess.run) pattern
+        # for the same reason; this makes probe/normalise consistent with
+        # it rather than depending on which loop implementation ends up
+        # active in a given process.
+        result = await asyncio.to_thread(
+            subprocess.run, args, capture_output=True, timeout=timeout_seconds
         )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_seconds)
-    except asyncio.TimeoutError as exc:
+    except subprocess.TimeoutExpired as exc:
         raise MediaError("ffprobe timed out reading this file") from exc
 
-    if proc.returncode != 0:
-        raise MediaError(f"ffprobe could not read this file: {stderr.decode(errors='replace')[:300]}")
+    if result.returncode != 0:
+        raise MediaError(f"ffprobe could not read this file: {result.stderr.decode(errors='replace')[:300]}")
 
     try:
-        data = json.loads(stdout)
+        data = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise MediaError("ffprobe returned unparseable output") from exc
 
@@ -163,12 +173,14 @@ async def normalise_video(
         str(output_path),
     ]
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        # See probe_local_file's comment: to_thread(subprocess.run), not
+        # asyncio.create_subprocess_exec, so this never depends on whichever
+        # event loop implementation is active in this process.
+        result = await asyncio.to_thread(
+            subprocess.run, args, capture_output=True, timeout=timeout_seconds
         )
-        _stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_seconds)
-    except asyncio.TimeoutError as exc:
+    except subprocess.TimeoutExpired as exc:
         raise MediaError("ffmpeg normalisation timed out") from exc
 
-    if proc.returncode != 0 or not output_path.exists():
-        raise MediaError(f"ffmpeg normalisation failed: {stderr.decode(errors='replace')[:500]}")
+    if result.returncode != 0 or not output_path.exists():
+        raise MediaError(f"ffmpeg normalisation failed: {result.stderr.decode(errors='replace')[:500]}")

@@ -10,11 +10,19 @@ router = APIRouter()
 
 
 @router.get("/admin/government-mode", response_model=GovernmentModeStatus)
-async def get_government_mode_status(_auth: AuthContext = Depends(get_current_auth)):
+async def get_government_mode_status(
+    _auth: AuthContext = Depends(get_current_auth),
+    session: AsyncSession = Depends(get_session),
+):
     """Any authenticated user may read this -- not just super admin -- so
     the Live view can safely check whether to curate to catalogue-only
-    cameras. Only the toggle itself (below) is super-admin-gated."""
-    return await government_mode_service.get_status()
+    cameras. Only the toggle itself (below) is super-admin-gated.
+
+    `degraded=True` means the cameras this mode believes it owns no longer
+    point at the relay in the database -- detection only, this read never
+    writes. Re-POSTing enabled=true repairs it (see enable()'s already-active
+    branch)."""
+    return await government_mode_service.get_status(session)
 
 
 @router.post("/admin/government-mode/toggle", response_model=GovernmentModeStatus)

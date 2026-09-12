@@ -135,18 +135,43 @@ def is_active() -> bool:
     return _load_gov_state() is not None
 
 
-def _status_from_state(state: dict | None) -> GovernmentModeStatus:
+def _status_from_state(state: dict | None, *, degraded: bool = False) -> GovernmentModeStatus:
     if not state:
         return GovernmentModeStatus(enabled=False, activated_at=None, camera_ids=[])
     return GovernmentModeStatus(
         enabled=True,
         activated_at=state["activated_at"],
         camera_ids=list(state.get("cameras", {}).keys()),
+        degraded=degraded,
     )
 
 
-async def get_status() -> GovernmentModeStatus:
-    return _status_from_state(_load_gov_state())
+async def _mismatched_cameras(session: AsyncSession, state: dict) -> dict[str, Camera]:
+    """Cameras this mode believes it owns whose DB row no longer points at
+    the relay. The state file and the `cameras` table are two independent
+    stores with no foreign key or trigger between them -- anything that
+    writes hls_url/rtsp_url outside this module (a direct edit, a seed
+    script's upsert, another admin session) can silently pull a camera out
+    from under an "enabled" government mode, and nothing before this
+    detected it. Reproduced 2026-09-12: re-seeding the government camera
+    fixture blanked all 16 cameras' URLs while the state file still said
+    enabled -- the Live view kept showing "connected" tiles with nothing to
+    play."""
+    mismatched: dict[str, Camera] = {}
+    for camera_id in state.get("cameras", {}):
+        camera = await session.get(Camera, camera_id)
+        if camera is None or camera.hls_url != _relay_hls_url(camera_id):
+            if camera is not None:
+                mismatched[camera_id] = camera
+    return mismatched
+
+
+async def get_status(session: AsyncSession | None = None) -> GovernmentModeStatus:
+    state = _load_gov_state()
+    if not state or session is None:
+        return _status_from_state(state)
+    degraded = bool(await _mismatched_cameras(session, state))
+    return _status_from_state(state, degraded=degraded)
 
 
 def _relay_env() -> dict:
@@ -191,6 +216,29 @@ async def enable(session: AsyncSession, auth: AuthContext) -> GovernmentModeStat
         # separate liveness check needed, and no manual disable/enable
         # cycle required to recover.
         _start_relay()
+
+        # The relay process being fine does not mean the DB still points at
+        # it -- see _mismatched_cameras. Re-apply this mode's own URLs to
+        # any camera that drifted, the same write enable() does below for a
+        # fresh activation, so "press the toggle on again" is the recovery
+        # for both a dead relay and a DB-level drift, not just the former.
+        mismatched = await _mismatched_cameras(session, existing)
+        if mismatched:
+            for camera_id, camera in mismatched.items():
+                camera.hls_url = _relay_hls_url(camera_id)
+                camera.rtsp_url = _relay_rtsp_url(camera_id)
+                session.add(camera)
+            add_audit_event(
+                session,
+                actor=auth.user,
+                action="government_mode.repaired",
+                target_type="government_mode",
+                target_id="singleton",
+                result="success",
+                details={"camera_ids": list(mismatched)},
+            )
+            await session.commit()
+
         return _status_from_state(existing)
 
     if demo_state.is_active():

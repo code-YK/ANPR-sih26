@@ -121,6 +121,42 @@ def _save_ingest_manifest() -> None:
     _INGEST_MANIFEST_PATH.write_text(json.dumps(entries))
 
 
+async def reap_stuck_normalising_on_startup() -> None:
+    """Called once at backend startup, alongside reconcile_ingest_on_startup.
+
+    Normalisation runs inline inside the upload request (see upload_recording
+    below) -- unlike an ingest run, there is no separate subprocess with a PID
+    to check for liveness. That makes this reconciliation simpler than the
+    ingest one, not riskier: this backend process is the only thing that was
+    ever running that normalisation, so if it is starting up now, any row
+    still "normalising" belongs to a request that cannot possibly still be in
+    flight -- either a previous instance of this same process handled it (and
+    is gone), or the ffmpeg it spawned died alongside it (ffmpeg is not
+    detached from this process, unlike the government-mode/demo-mode relay
+    subprocesses, which are kept alive deliberately). There is no live case
+    this could wrongly interrupt.
+
+    Without this, the except clause added for exactly this situation
+    (upload_recording's `except Exception`) never runs -- the crash was the
+    whole process going down, not a normal exception inside its try block --
+    and the row is left saying "normalising" forever, indistinguishable from
+    one that is still genuinely in progress.
+    """
+    async with async_session() as session:
+        stuck = (
+            await session.execute(select(Recording).where(Recording.status == "normalising"))
+        ).scalars().all()
+        for recording in stuck:
+            recording.status = "rejected"
+            recording.reject_reason = (
+                "Normalisation did not finish -- the backend restarted or crashed "
+                "while this recording was processing. Re-upload to try again."
+            )
+        if stuck:
+            await session.commit()
+            logger.info("Reaped %d recording(s) stuck in 'normalising' from a previous run", len(stuck))
+
+
 async def reconcile_ingest_on_startup() -> None:
     """Called once at backend startup. A manifest entry from a previous
     process is not necessarily dead the way the live-worker manifest's
@@ -166,6 +202,62 @@ async def reconcile_ingest_on_startup() -> None:
 
 def _content_dir(sha256: str) -> Path:
     return Path(get_settings().recordings_dir) / sha256
+
+
+async def _finalise_recording(session: AsyncSession, recording: Recording, original_path: Path, settings) -> None:
+    """Probe, normalise, and update `recording` in place; commits its own
+    transaction. Never raises -- any failure, including a crash inside
+    ffmpeg or this process itself, resolves the row to "rejected" rather
+    than leaving it on "normalising" with nothing watching it.
+
+    Shared by a fresh upload and a retry of a previously rejected one (see
+    upload_recording's `existing.status == "rejected"` branch) so a retry
+    genuinely re-runs this step against the same row instead of the caller
+    getting back the same dead one a second time.
+    """
+    try:
+        info = await probe_local_file(original_path, timeout_seconds=settings.ffprobe_timeout_seconds)
+        fps = parse_frame_rate_fraction(info["r_frame_rate"])
+        if fps is None:
+            raise MediaError("could not determine a valid frame rate for this file")
+
+        normalised_path = original_path.parent / "normalised.mp4"
+        await normalise_video(
+            original_path, normalised_path,
+            target_fps=fps, timeout_seconds=settings.ffmpeg_normalise_timeout_seconds,
+        )
+        norm_info = await probe_local_file(normalised_path, timeout_seconds=settings.ffprobe_timeout_seconds)
+        norm_fps = parse_frame_rate_fraction(norm_info["r_frame_rate"]) or fps
+
+        recording.normalised_path = str(normalised_path.relative_to(Path(settings.recordings_dir)))
+        recording.duration_seconds = norm_info["duration_seconds"]
+        recording.fps_num = norm_fps.numerator
+        recording.fps_den = norm_fps.denominator
+        recording.frame_count = int(norm_info["nb_frames"]) if norm_info.get("nb_frames") else None
+        recording.width = norm_info["width"]
+        recording.height = norm_info["height"]
+        recording.reject_reason = None
+        recording.status = "ready"
+    except MediaError as exc:
+        recording.status = "rejected"
+        recording.reject_reason = str(exc)
+        logger.info("Recording %s rejected: %s", recording.id, exc)
+    except Exception as exc:  # noqa: BLE001 - any crash here must still resolve the row
+        # Narrowing this to MediaError left an unhandled exception (backend
+        # restart mid-normalise, disk full, a killed ffmpeg) sitting on an
+        # await forever: the row had already been committed as "normalising"
+        # before this step started, so an unresolved crash here left it stuck
+        # in that state permanently -- no error shown, no way to retry, the
+        # only fix was reaching into the database by hand. See also the
+        # startup reaper (reap_stuck_normalising_on_startup) for the case
+        # where the crash was the whole process going down rather than one
+        # that reached this except.
+        recording.status = "rejected"
+        recording.reject_reason = f"Normalisation failed: {exc}"
+        logger.exception("Recording %s normalisation crashed", recording.id)
+
+    await session.commit()
+    await session.refresh(recording)
 
 
 @router.post("/investigate/recordings", response_model=RecordingOut, status_code=201)
@@ -229,6 +321,42 @@ async def upload_recording(
         # are simply discarded in favour of the recording's original ones.
         staging_path.unlink(missing_ok=True)
         require_department_access(auth, existing.department, "viewer")
+
+        if existing.status == "normalising":
+            # A restart can never leave a row here at request time -- the
+            # startup reaper (reap_stuck_normalising_on_startup) resolves
+            # every one to "rejected" before this process accepts traffic.
+            # So a live "normalising" row here means another request for
+            # these exact bytes is genuinely in flight right now. Refuse
+            # rather than starting a second ffmpeg against the same
+            # normalised_path -- concurrent writers to one file corrupt it.
+            raise HTTPException(
+                status_code=409,
+                detail="This recording is still being processed by another request; check back shortly.",
+            )
+
+        if existing.status == "rejected":
+            # The whole point of reject_reason telling an operator to
+            # "re-upload to try again": that must actually retry, not hand
+            # back the same dead row a second time. The original bytes are
+            # still on disk (this branch never deletes them), so re-run
+            # normalisation in place on the existing row instead of the
+            # early-return every other status takes.
+            content_dir = _content_dir(content_sha256)
+            original_path = content_dir / ("original" + Path(existing.original_filename).suffix)
+            if not original_path.exists():
+                raise HTTPException(
+                    status_code=422,
+                    detail="The original file for this recording is no longer on disk; it cannot be retried.",
+                )
+            existing.status = "normalising"
+            existing.reject_reason = None
+            await session.commit()
+            await session.refresh(existing)
+            await _finalise_recording(session, existing, original_path, settings)
+            response.status_code = 200
+            return existing
+
         response.status_code = 200
         return existing
 
@@ -260,35 +388,7 @@ async def upload_recording(
     await session.commit()
     await session.refresh(recording)
 
-    try:
-        info = await probe_local_file(original_path, timeout_seconds=settings.ffprobe_timeout_seconds)
-        fps = parse_frame_rate_fraction(info["r_frame_rate"])
-        if fps is None:
-            raise MediaError("could not determine a valid frame rate for this file")
-
-        normalised_path = content_dir / "normalised.mp4"
-        await normalise_video(
-            original_path, normalised_path,
-            target_fps=fps, timeout_seconds=settings.ffmpeg_normalise_timeout_seconds,
-        )
-        norm_info = await probe_local_file(normalised_path, timeout_seconds=settings.ffprobe_timeout_seconds)
-        norm_fps = parse_frame_rate_fraction(norm_info["r_frame_rate"]) or fps
-
-        recording.normalised_path = str(normalised_path.relative_to(Path(settings.recordings_dir)))
-        recording.duration_seconds = norm_info["duration_seconds"]
-        recording.fps_num = norm_fps.numerator
-        recording.fps_den = norm_fps.denominator
-        recording.frame_count = int(norm_info["nb_frames"]) if norm_info.get("nb_frames") else None
-        recording.width = norm_info["width"]
-        recording.height = norm_info["height"]
-        recording.status = "ready"
-    except MediaError as exc:
-        recording.status = "rejected"
-        recording.reject_reason = str(exc)
-        logger.info("Recording %s rejected: %s", recording.id, exc)
-
-    await session.commit()
-    await session.refresh(recording)
+    await _finalise_recording(session, recording, original_path, settings)
     return recording
 
 

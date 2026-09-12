@@ -853,6 +853,13 @@ class GovernmentModeStatus(BaseModel):
     enabled: bool
     activated_at: str | None
     camera_ids: list[str]
+    # True when the state file says this mode is on but at least one of its
+    # cameras no longer points at the relay in the database (see
+    # government_mode.py's _reconcile_cameras) -- e.g. a direct edit, another
+    # process's write, or a seed script upsert touched the row in between.
+    # Pressing the toggle "on" again (enable() while already active) repairs
+    # this; it does not happen automatically on a read.
+    degraded: bool = False
 
 
 class GovernmentModeToggle(BaseModel):

@@ -51,6 +51,7 @@ async def lifespan(_app: FastAPI):
     # restart, so no prior persisted intent may auto-start workers here --
     # see clear_persisted_intent.
     await analytics.clear_persisted_intent()
+    await investigate.reap_stuck_normalising_on_startup()
     await investigate.reconcile_ingest_on_startup()
     try:
         await webrtc_relay.ensure_mediamtx_running()
