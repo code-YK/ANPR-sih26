@@ -156,6 +156,26 @@
 .admin-source-checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .admin-source-checkbox input { width: auto; }
 
+/* Demo mode / government mode toggles live behind a collapsed-by-default
+   <details> rather than another card, so they don't compete for attention
+   with the operational controls a department admin's eye should land on
+   first. Only a super admin ever renders this section at all. */
+.admin-advanced { margin-top: 28px; }
+.admin-advanced summary {
+  cursor: pointer; user-select: none; list-style: none;
+  color: var(--muted); font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.admin-advanced summary::-webkit-details-marker { display: none; }
+.admin-advanced[open] summary { margin-bottom: 12px; }
+.admin-advanced-row {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px; max-width: 640px;
+}
+.admin-advanced-row + .admin-advanced-row { margin-top: 10px; }
+.admin-advanced-row .switch { margin-top: 2px; }
+.admin-advanced-row code { font-size: 12px; background: var(--ink-800); padding: 1px 5px; border-radius: 4px; }
+
 /* Below 900px the rail collapses to a top bar (DESIGN.md §6.4): the console
    is a desk product, so narrow screens must stay usable, not optimal. The
    rail's own sticky/full-height rules have to be unwound explicitly here,

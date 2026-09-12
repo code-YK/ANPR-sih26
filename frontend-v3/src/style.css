@@ -813,7 +813,15 @@ meter { color-scheme: dark; }
   border-radius: var(--radius); padding: 10px; transition: border-color 0.15s, box-shadow 0.15s;
 }
 .result-card:hover { border-color: var(--entity); box-shadow: var(--glow-entity); }
-.result-card-thumb { width: 100px; height: 64px; object-fit: cover; border-radius: var(--radius-control); flex-shrink: 0; }
+/* `contain`, not `cover`: a track crop is already cut tight to its own
+   detection box, so cover re-cropped it a second time to this 100x64 ratio --
+   a tall subject (a motorcyclist, a pedestrian) lost its head and wheels and
+   read as "zoomed right in". contain shows the whole crop; the surface behind
+   it fills whatever letterboxing the crop's own aspect leaves. */
+.result-card-thumb {
+  width: 100px; height: 64px; object-fit: contain; background: var(--ink-700);
+  border-radius: var(--radius-control); flex-shrink: 0;
+}
 .result-card-thumb-empty {
   display: flex; align-items: center; justify-content: center; background: var(--ink-700);
   color: var(--muted); font-size: 11px; text-align: center;

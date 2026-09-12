@@ -29,6 +29,7 @@ import contextlib
 import json
 import logging
 import os
+import platform
 import signal
 import subprocess
 import time
@@ -83,6 +84,15 @@ def _resolve_worker_python() -> Path:
 _WORKER_PYTHON = _resolve_worker_python()
 _LOG_DIR = _WORKER_DIR / "worker_logs"
 _MANIFEST_PATH = _LOG_DIR / "workers_manifest.json"
+# A worker is meant to keep running for as long as its own analytics toggle
+# says so, independent of this backend process's lifetime. Without this, a
+# plain Popen child on Windows shares its parent console and gets killed the
+# instant that console receives Ctrl+C or closes -- e.g. restarting the
+# backend during development silently took every running worker down with
+# it. CREATE_NEW_PROCESS_GROUP detaches it from that console's control-event
+# delivery; explicit stop (terminate()/proc.kill() in _stop_worker below)
+# still targets the PID directly and is unaffected.
+_DETACHED = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {}
 
 _MODES = ("vehicle", "person", "suspicious")
 _WORKER_SCRIPTS = {
@@ -207,33 +217,20 @@ _workers: dict[tuple[str, str], _WorkerHandle] = {}
 def _analytics_source(camera: Camera) -> tuple[str, str]:
     """Choose the worker's source without ever returning it to a browser.
 
-    RTSP/TCP is the inference transport required by GOV-ING-002/003. HLS is
-    the bounded fallback for cameras or networks where RTSP cannot open. The
-    HLS URL is also passed separately as timestamp metadata when RTSP is the
-    frame source; raw endpoints never leave this backend/worker boundary.
+    HLS remains preferred because its program-date-time metadata supplies the
+    source-time anchor used by sightings. A custom RTSP-only camera is still
+    a valid live detector source; it is opened over TCP below.  There is no
+    silent catalogue fallback: manually onboarded cameras are not guaranteed
+    to exist in the configured sandbox catalogue.
     """
+    if camera.hls_url:
+        return camera.hls_url, "hls"
     if camera.rtsp_url:
         scheme = urlparse(camera.rtsp_url).scheme.lower()
         if scheme not in {"rtsp", "rtsps"}:
             raise RuntimeError("Camera RTSP endpoint has an unsupported URL scheme")
         return camera.rtsp_url, "rtsp"
-    if camera.hls_url:
-        return camera.hls_url, "hls"
     raise RuntimeError("Camera has no HLS or RTSP stream configured for analytics")
-
-
-def _analytics_worker_source_args(camera: Camera) -> tuple[list[str], str]:
-    """Build redaction-sensitive worker arguments for source selection.
-
-    When both endpoints exist the worker decodes RTSP/TCP, falls back to HLS
-    after a bounded failed open, and continues using the HLS playlist's
-    program-date-time as the best available absolute timestamp anchor.
-    """
-    source_url, source_transport = _analytics_source(camera)
-    args = ["--url", source_url]
-    if source_transport == "rtsp" and camera.hls_url:
-        args += ["--fallback-url", camera.hls_url, "--timestamp-url", camera.hls_url]
-    return args, source_transport
 
 
 def _rtsp_capture_options(existing: str | None) -> str:
@@ -336,8 +333,8 @@ async def clear_persisted_intent() -> None:
     the backend went down would have a yolo11x worker auto-started for it on
     the next boot -- GPU load and a live gateway connection that nobody in
     front of the console asked for, and which nothing in the UI explains
-    (the toggle only appears once you focus that camera). Since no operator
-    has explicitly resumed monitoring after a restart, the
+    (the toggle only appears once you focus that camera). Since ANPR is now
+    no operator has explicitly resumed monitoring after a restart, so the
     correct startup state is off and clearing the column represents that
     honestly.
     """
@@ -405,8 +402,8 @@ async def _start_worker(camera_id: str, mode: str, model: str, session: AsyncSes
     # manually onboarded and named-source cameras are only known to this
     # registry. Passing the selected source directly also lets an RTSP-only
     # custom stream run analytics instead of failing back to that catalogue.
-    source_args, source_transport = _analytics_worker_source_args(camera)
-    worker_args += source_args
+    source_url, source_transport = _analytics_source(camera)
+    worker_args += ["--url", source_url]
     if mode == "vehicle":
         # Absolute, not relative: the worker's cwd is _WORKER_DIR
         # (multi-object-tracking/), not this process's -- a relative
@@ -430,7 +427,15 @@ async def _start_worker(camera_id: str, mode: str, model: str, session: AsyncSes
     # reproduce when the identical subprocess.Popen call was made outside
     # this backend process. CPU is slower (~90ms/crop vs ~10ms/crop) but
     # was never observed to crash.
-    worker_env["SENTINEL_FORCE_CPU_PLATES"] = "1"
+    #
+    # CoreML is exclusively a macOS execution provider -- it is never even a
+    # candidate on Windows/Linux (see _resolve_onnx_providers), so forcing
+    # CPU there buys no crash protection, only a needless ~9x slowdown that
+    # was observed to starve short/looping demo and government-mode clips
+    # of enough sampled frames to ever confirm a plate before its track
+    # ends (see queue backlog and dropped-frame counts in worker logs).
+    if platform.system() == "Darwin":
+        worker_env["SENTINEL_FORCE_CPU_PLATES"] = "1"
 
     proc = subprocess.Popen(
         worker_args,
@@ -439,6 +444,7 @@ async def _start_worker(camera_id: str, mode: str, model: str, session: AsyncSes
         stderr=subprocess.STDOUT,
         stdin=subprocess.DEVNULL,
         env=worker_env,
+        **_DETACHED,
     )
     log_file.close()  # the child holds its own fd to the same file
 

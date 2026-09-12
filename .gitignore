@@ -70,6 +70,20 @@ backend/evidence/
 # checked in.
 /fixtures/live-test/
 
+# Government-mode recordings (backend/scripts/government_feed_relay.py,
+# app/services/government_mode.py): real footage captured from the
+# government-provided feeds by multi-object-tracking/record_live_clips.py.
+# Deliberately NOT committed -- ~670 MB of real footage would make every
+# clone carry it, and it is real-world video besides. Share the directory
+# out of band; government mode discovers whatever is present at toggle
+# time, so a machine without it simply has nothing to relay.
+/recorded-streams/
+
+# Third-party binaries fetched per machine, never vendored: mediamtx backs
+# both the WebRTC/WHEP preview relay and government mode's own relay.
+# Point MEDIAMTX_BIN at wherever it lands on this machine.
+/tools/
+
 # Logs (operational output, not source)
 *.log
 logs/

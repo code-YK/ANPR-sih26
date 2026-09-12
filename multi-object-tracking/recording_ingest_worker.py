@@ -68,6 +68,13 @@ _CHUNK_MAX_BYTES = 512 * 1024
 _CHUNK_MAX_SECONDS = 15.0
 _HEARTBEAT_INTERVAL_SECONDS = 15.0
 _BOX_SAMPLE_HZ = 10  # fixed-rate timeline stored/served to the browser
+# Context kept around a track's detection box when its thumbnail is cut, as a
+# fraction of the box's own width/height per side. See maybe_capture_crop().
+_CROP_PAD_FRAC = 0.10
+# Thumbnails are small crops shown at 2x on a HiDPI display, so JPEG ringing
+# around plate glyphs and number edges is disproportionately visible; the extra
+# bytes are irrelevant next to the recording itself.
+_CROP_JPEG_QUALITY = 92
 
 
 def parse_args():
@@ -251,13 +258,15 @@ class TrackAccum:
     endpoint serves. Raw samples are pixel-space (cx, cy, w, h); the encoded
     payload normalises to 0..1000 against the frame size.
 
-    Also holds the best-confidence crop as already-encoded JPEG bytes,
-    updated in place whenever a higher-confidence detection arrives --
-    never the raw frame, which would be one full-resolution image retained
-    per active track for the life of a long recording."""
+    Also holds this track's best crop as already-encoded JPEG bytes, updated
+    in place whenever a detection scores higher on maybe_capture_crop()'s
+    size-and-confidence rule -- never the raw frame, which would be one
+    full-resolution image retained per active track for the life of a long
+    recording."""
 
     __slots__ = ("track_ref", "kind", "first_frame", "last_frame", "first_ms",
-                 "last_ms", "frame_count", "best_conf", "raw", "best_crop_jpeg")
+                 "last_ms", "frame_count", "best_conf", "raw", "best_crop_jpeg",
+                 "best_crop_score")
 
     def __init__(self, track_ref, kind, frame_idx, ms, box, conf):
         self.track_ref = int(track_ref)
@@ -270,6 +279,7 @@ class TrackAccum:
         self.best_conf = float(conf)
         self.raw = [(ms, *box)]
         self.best_crop_jpeg = None
+        self.best_crop_score = 0.0
 
     def update(self, frame_idx, ms, box, conf):
         self.last_frame = frame_idx
@@ -279,16 +289,49 @@ class TrackAccum:
         self.raw.append((ms, *box))
 
     def maybe_capture_crop(self, frame, box, conf) -> None:
-        if self.best_crop_jpeg is not None and conf < self.best_conf:
-            return
+        """Keep the crop that will actually be *legible* in the results grid,
+        not merely the most confident one.
+
+        Selecting on confidence alone (the previous rule) is what made these
+        thumbnails blurry: confidence does not correlate with how many pixels
+        the subject occupies, so a distant, small, very-confident car beat the
+        same car's close-up a second later. Measured over 315 real thumbnails
+        from an earlier ingest, the median crop's short side was 50px and 57%
+        were under 64px -- every one of those is upscaled by the 100x64 CSS
+        box (200x128 on a 2x display) into visible mush.
+
+        Scoring on `short_side * conf` fixes the cause rather than the symptom:
+        short side is exactly what the display box upscales from, and the
+        confidence factor still keeps a crisp-but-doubtful box from winning
+        over a solid detection of similar size.
+        """
         cx, cy, w, h = box
-        x1, y1 = max(0, int(cx - w / 2)), max(0, int(cy - h / 2))
-        x2, y2 = min(frame.shape[1], int(cx + w / 2)), min(frame.shape[0], int(cy + h / 2))
+        # A little context around the subject. A crop cut exactly on the box
+        # reads as "zoomed in" because the subject is jammed against all four
+        # edges; this is also what `object-fit: cover` in the results grid
+        # then trims into, so the tight version lost content twice over.
+        #
+        # Person crops stay tight on purpose: this same JPEG is what
+        # person_embedding sees (see to_payload below), and every embedding
+        # already stored in `tracks` was computed from an unpadded crop.
+        # Padding only these would silently change the framing on one side of
+        # a cosine comparison that ranks old and new runs together, so the
+        # thumbnail gain is not worth making the search inconsistent.
+        pad = _CROP_PAD_FRAC if self.kind != "person" else 0.0
+        pad_x, pad_y = w * pad, h * pad
+        x1, y1 = max(0, int(cx - w / 2 - pad_x)), max(0, int(cy - h / 2 - pad_y))
+        x2 = min(frame.shape[1], int(cx + w / 2 + pad_x))
+        y2 = min(frame.shape[0], int(cy + h / 2 + pad_y))
         if x2 - x1 < 2 or y2 - y1 < 2:
             return
-        ok, buf = cv2.imencode(".jpg", frame[y1:y2, x1:x2], [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+        score = min(x2 - x1, y2 - y1) * float(conf)
+        if self.best_crop_jpeg is not None and score <= self.best_crop_score:
+            return
+        ok, buf = cv2.imencode(".jpg", frame[y1:y2, x1:x2],
+                               [int(cv2.IMWRITE_JPEG_QUALITY), _CROP_JPEG_QUALITY])
         if ok:
             self.best_crop_jpeg = buf.tobytes()
+            self.best_crop_score = score
 
     def write_thumb(self, thumbs_dir) -> str | None:
         if self.best_crop_jpeg is None:
@@ -344,10 +387,13 @@ class TrackAccum:
             payload["plate_tentative"] = tentative_text
             payload["plate_confidence"] = float(confirmed_score or tentative_score) or None
             payload["plate_votes"] = confirmed_votes or tentative_votes or None
-        # best_crop_jpeg is already the highest-confidence crop of this
-        # track -- the same image write_thumb() just persisted -- so the
-        # embedding and the thumbnail an operator sees are guaranteed to be
-        # the same frame, never two different moments of the same track.
+        # best_crop_jpeg is already this track's best crop by
+        # maybe_capture_crop()'s size-and-confidence rule -- the same image
+        # write_thumb() just persisted -- so the embedding and the thumbnail
+        # an operator sees are guaranteed to be the same frame, never two
+        # different moments of the same track. That crop is unpadded for
+        # person tracks specifically so this embedding stays framed the way
+        # every previously stored one was.
         if embed_persons and self.kind == "person" and self.best_crop_jpeg is not None:
             try:
                 vec = person_embedding.embed_jpeg_bytes(self.best_crop_jpeg)

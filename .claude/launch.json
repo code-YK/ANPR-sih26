@@ -2,17 +2,18 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "landing",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8090", "--directory", "landing"],
-      "port": 8090
-    },
-    {
       "name": "frontend-v3",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend-v3", "run", "dev", "--", "--host", "--port", "5175"],
-      "port": 5175,
-      "url": "http://localhost:5175"
+      "runtimeArgs": ["--prefix", "frontend-v3", "run", "dev"],
+      "port": 5174,
+      "url": "http://localhost:5174"
+    },
+    {
+      "name": "frontend-v2",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend-v2", "run", "dev"],
+      "port": 5173,
+      "url": "http://localhost:5173"
     }
   ]
 }

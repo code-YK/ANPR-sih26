@@ -68,7 +68,7 @@ def build_pan_clip(
             f"zoompan=z='min(zoom+{zoom_rate},1.4)':d=1:"
             f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height},fps={fps}"
         ),
-        "-t", str(duration), "-c:v", "h264_videotoolbox", "-pix_fmt", "yuv420p", out_path,
+        "-t", str(duration), "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", out_path,
     ])
 
 
@@ -79,7 +79,7 @@ def build_synthetic_clip(out_path: str, *, duration: int = 10, fps: int = 25, wi
         "ffmpeg", "-y", "-f", "lavfi",
         "-i", f"color=size={width}x{height}:rate={fps}:color=gray:duration={duration}",
         "-vf", r"drawbox=x='mod(t*80\,iw-200)':y=ih/2-100:w=200:h=100:color=red@0.8:t=fill",
-        "-c:v", "h264_videotoolbox", "-pix_fmt", "yuv420p", out_path,
+        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", out_path,
     ])
 
 
@@ -89,7 +89,7 @@ def build_variable_frame_rate(src_path: str, out_path: str) -> None:
     _run([
         "ffmpeg", "-y", "-i", src_path,
         "-vf", r"select='not(mod(n\,7)*eq(mod(n\,11)\,0))',setpts=N/FRAME_RATE/TB",
-        "-fps_mode", "vfr", "-c:v", "h264_videotoolbox", "-pix_fmt", "yuv420p", out_path,
+        "-fps_mode", "vfr", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", out_path,
     ])
 
 

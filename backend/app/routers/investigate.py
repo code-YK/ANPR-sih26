@@ -23,6 +23,7 @@ actual tracker source rather than assumed:
 
 import asyncio
 import base64
+import contextlib
 import json
 import logging
 import os
@@ -877,14 +878,27 @@ async def search_by_person(
     if not image_bytes:
         raise HTTPException(status_code=422, detail="Empty file")
 
-    with tempfile.NamedTemporaryFile(suffix=".jpg") as tmp:
+    # delete=False + an explicit close before the subprocess runs, rather than
+    # the obvious `with NamedTemporaryFile(...) as tmp:` around it. On Windows
+    # NamedTemporaryFile holds the file open with exclusive sharing, so while
+    # this process still has the handle, person_search.py cannot open the same
+    # path and dies with "PermissionError: [Errno 13] Permission denied".
+    # POSIX allows the concurrent open, which is why the original form worked
+    # on the machine this was written on and failed on every Windows box.
+    tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+    try:
         tmp.write(image_bytes)
-        tmp.flush()
+        tmp.close()
         proc = await asyncio.to_thread(
             subprocess.run,
             [str(_WORKER_PYTHON), str(_PERSON_SEARCH_SCRIPT), "--image", tmp.name],
             cwd=str(_WORKER_DIR), capture_output=True, text=True, timeout=60,
         )
+    finally:
+        # delete=False means nothing else will: the query photo is the
+        # operator's own upload and must not outlive the request.
+        with contextlib.suppress(OSError):
+            os.unlink(tmp.name)
 
     stdout_lines = proc.stdout.strip().splitlines()
     try:

@@ -70,7 +70,7 @@ _FIXTURE_ROLE_PREFIX = "test-camera-"
 # ports, and any Authorization/token-shaped string.
 _REDACT_PATTERNS = [
     re.compile(r"rtsp://\S+"),
-    re.compile(r"https?://[^\s\"']*(?:8554|8888|9997)[^\s\"']*"),
+    re.compile(r"https?://[^\s\"']*(?:8554|8557|8888|9997|9998)[^\s\"']*"),
     re.compile(r"(?i)(authorization|token|password|secret)\s*[:=]\s*\S+"),
 ]
 

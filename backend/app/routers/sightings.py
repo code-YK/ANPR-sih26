@@ -26,6 +26,8 @@ from app.models.alert import Alert
 from app.models.camera import Camera, Sighting
 from app.models.watchlist import WatchlistEntry
 from app.schemas import (
+    CameraSightingReport,
+    CameraSightingReportRow,
     JourneyExportReport,
     JourneyExportStop,
     JourneyStop,
@@ -386,6 +388,100 @@ async def vehicle_journey_export(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="journey-{report.plate}-{date}.pdf"'},
+    )
+
+
+async def build_camera_sighting_report(session: AsyncSession, auth: AuthContext, camera_id: str) -> CameraSightingReport:
+    """GOV-ING-004's own report shape: every plate read *this camera*
+    produced, oldest to newest, independent of watchlist status -- the
+    government-feed video-analytics deliverable needs "what did this
+    camera see", not "what matched a flagged plate" (that's the alert
+    list, a different question already answered elsewhere).
+    """
+    camera = await session.get(Camera, camera_id)
+    if camera is None:
+        raise HTTPException(status_code=404, detail=f"Camera {camera_id!r} not found")
+    require_department_access(auth, camera.department)
+
+    stmt = (
+        select(Sighting)
+        .where(Sighting.camera_id == camera_id, Sighting.plate.is_not(None))
+        .order_by(Sighting.seen_at.asc())
+    )
+    sightings = (await session.execute(stmt)).scalars().all()
+
+    rows = [
+        CameraSightingReportRow(
+            sequence=sequence,
+            sighting_id=s.id,
+            seen_at=s.seen_at,
+            plate=s.plate,
+            confidence=float(s.confidence) if s.confidence is not None else None,
+            vehicle_type=s.vehicle_type,
+            evidence_url=f"/api/sightings/{s.id}/evidence" if s.has_evidence else None,
+        )
+        for sequence, s in enumerate(sightings, start=1)
+    ]
+
+    return CameraSightingReport(
+        camera_id=camera.camera_id,
+        camera_name=camera.name,
+        location_text=camera.location_text,
+        department=camera.department,
+        generated_at=datetime.now(timezone.utc),
+        sighting_count=len(rows),
+        distinct_plate_count=len({r.plate for r in rows if r.plate}),
+        first_seen=rows[0].seen_at if rows else None,
+        last_seen=rows[-1].seen_at if rows else None,
+        rows=rows,
+    )
+
+
+@router.get("/cameras/{camera_id}/sightings/export")
+async def camera_sightings_export(
+    camera_id: str,
+    format: str = "json",
+    auth: AuthContext = Depends(get_current_auth),
+    session: AsyncSession = Depends(get_session),
+):
+    if format not in {"json", "csv", "html", "pdf"}:
+        raise HTTPException(status_code=422, detail="format must be one of json, csv, html, pdf")
+
+    report = await build_camera_sighting_report(session, auth, camera_id)
+    date = datetime.now(timezone.utc).date().isoformat()
+
+    if format == "json":
+        return Response(
+            content=report.model_dump_json(),
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="camera-{report.camera_id}-sightings-{date}.json"'},
+        )
+
+    if format == "csv":
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
+        writer.writerow(["sequence", "seen_at", "plate", "confidence", "vehicle_type", "evidence_url"])
+        for row in report.rows:
+            seen_at_iso = row.seen_at.isoformat().replace("+00:00", "Z")
+            writer.writerow([row.sequence, seen_at_iso, row.plate or "", row.confidence, row.vehicle_type or "", row.evidence_url or ""])
+        return Response(
+            content=output.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="camera-{report.camera_id}-sightings-{date}.csv"'},
+        )
+
+    template = _jinja_env.get_template("camera_sightings_report.html")
+    html = template.render(report=report)
+    if format == "html":
+        return HTMLResponse(content=html)
+
+    from weasyprint import HTML
+
+    pdf_bytes = HTML(string=html, base_url=_TEMPLATE_DIR).write_pdf()
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="camera-{report.camera_id}-sightings-{date}.pdf"'},
     )
 
 

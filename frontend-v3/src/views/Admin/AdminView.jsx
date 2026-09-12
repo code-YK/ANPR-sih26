@@ -46,19 +46,27 @@ export default function AdminView() {
   const [busy, setBusy] = useState(false);
   const [sources, setSources] = useState([]);
   const [newSource, setNewSource] = useState(NEW_SOURCE_DRAFT);
+  const [demoMode, setDemoMode] = useState(null);
+  const [demoBusy, setDemoBusy] = useState(false);
+  const [governmentMode, setGovernmentMode] = useState(null);
+  const [governmentBusy, setGovernmentBusy] = useState(false);
   const userListRef = useGsapReveal(".admin-user-card", { stagger: 0.06, duration: 0.4, y: 18, scale: true }, [users.length]);
 
   const load = useCallback(async () => {
-    const [requestRows, userRows, auditPage, sourceRows] = await Promise.all([
+    const [requestRows, userRows, auditPage, sourceRows, demoModeStatus, governmentModeStatus] = await Promise.all([
       api("/admin/registration-requests?request_status=pending"),
       api("/admin/users"),
       api(`/admin/audit-events?limit=${AUDIT_PAGE_SIZE}&offset=${auditOffset}`),
       superAdmin ? api("/catalogue-sources") : Promise.resolve([]),
+      superAdmin ? api("/admin/demo-mode") : Promise.resolve(null),
+      superAdmin ? api("/admin/government-mode") : Promise.resolve(null),
     ]);
     setRequests(requestRows);
     setUsers(userRows);
     setAudit(auditPage);
     setSources(sourceRows);
+    setDemoMode(demoModeStatus);
+    setGovernmentMode(governmentModeStatus);
   }, [auditOffset, superAdmin]);
 
   useEffect(() => {
@@ -222,6 +230,40 @@ export default function AdminView() {
       () => api(`/catalogue-sources/${source.id}`, { method: "DELETE" }),
       `Deleted "${source.name}"`,
     );
+  }
+
+  async function toggleDemoMode(enabled) {
+    setDemoBusy(true);
+    try {
+      const status = await api("/admin/demo-mode/toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      setDemoMode(status);
+      showToast(enabled ? "Demo mode enabled" : "Demo mode disabled — rehearsal cameras and watchlist entry removed");
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      setDemoBusy(false);
+    }
+  }
+
+  async function toggleGovernmentMode(enabled) {
+    setGovernmentBusy(true);
+    try {
+      const status = await api("/admin/government-mode/toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      setGovernmentMode(status);
+      showToast(enabled ? "Government mode enabled" : "Government mode disabled — original stream URLs restored");
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      setGovernmentBusy(false);
+    }
   }
 
   return (
@@ -559,6 +601,63 @@ export default function AdminView() {
             onClick={() => setAuditOffset((current) => current + AUDIT_PAGE_SIZE)}
           >Older</button>
         </div>
+      )}
+
+      {superAdmin && (
+        <details className="admin-advanced">
+          <summary>Advanced</summary>
+          <div className="admin-advanced-row">
+            <div>
+              <strong>Demo mode</strong>
+              <p className="hint">
+                Stands up a rehearsal environment for a screen recording: onboards a small set of cameras backed by
+                looping synthetic footage, a matching watchlist entry, and a plate's prior stops, all through the
+                same code paths real onboarding and ANPR use. Turning this off removes everything it created and
+                leaves the rest of the registry untouched.
+              </p>
+              {demoMode?.enabled && (
+                <p className="hint">
+                  Active since {new Date(demoMode.activated_at).toLocaleString()} — {demoMode.camera_count} camera(s), plate {demoMode.plate}.
+                </p>
+              )}
+            </div>
+            <label className="switch" title={demoMode?.enabled ? "Turn demo mode off" : "Turn demo mode on"}>
+              <input
+                type="checkbox"
+                checked={!!demoMode?.enabled}
+                disabled={demoBusy || demoMode === null}
+                onChange={(event) => toggleDemoMode(event.target.checked)}
+              />
+            </label>
+          </div>
+
+          <div className="admin-advanced-row">
+            <div>
+              <strong>Government mode</strong>
+              <p className="hint">
+                The mirror image of demo mode: shows only real catalogue-provided cameras (nothing this app itself
+                created), and replaces any of their streams with the matching completed recording from{" "}
+                <code>recorded-streams/</code> (record_live_clips.py's own output — the camera_id comes from each
+                clip's .json sidecar) — the real government feed unchanged everywhere else, ANPR and every other
+                analytics mode included. Turning this off restores the original stream URLs. Mutually exclusive
+                with demo mode.
+              </p>
+              {governmentMode?.enabled && (
+                <p className="hint">
+                  Active since {new Date(governmentMode.activated_at).toLocaleString()} — camera(s): {governmentMode.camera_ids.join(", ")}.
+                </p>
+              )}
+            </div>
+            <label className="switch" title={governmentMode?.enabled ? "Turn government mode off" : "Turn government mode on"}>
+              <input
+                type="checkbox"
+                checked={!!governmentMode?.enabled}
+                disabled={governmentBusy || governmentMode === null}
+                onChange={(event) => toggleGovernmentMode(event.target.checked)}
+              />
+            </label>
+          </div>
+        </details>
       )}
     </section>
   );

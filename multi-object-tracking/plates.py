@@ -52,10 +52,20 @@ def _resolve_onnx_providers(device):
     backend sets this env var for every worker it spawns; a manual/
     interactive invocation (this module's own dev/test use) leaves it
     unset and keeps CoreML's ~10ms/crop instead of CPU's ~90ms/crop.
+
+    Found 2026-09-10: `device` here is whatever resolve_device() returned,
+    and on CUDA hardware that is the torch/YOLO device-index convention
+    ("0", "1", ...), never the literal string "cuda" -- so `device ==
+    "cuda"` was false on every real GPU machine and this always fell
+    through to plain CPUExecutionProvider, silently, exactly like the
+    MPS bug above it was supposed to fix. is_cuda below treats anything
+    that isn't "cpu" or "mps" as a CUDA device index, matching
+    resolve_device()'s own contract.
     """
     if os.environ.get("SENTINEL_FORCE_CPU_PLATES") == "1":
         return ["CPUExecutionProvider"]
-    if device == "cuda":
+    is_cuda = device not in ("cpu", "mps")
+    if is_cuda:
         return ["CUDAExecutionProvider", "CPUExecutionProvider"]
     if platform.system() == "Darwin":
         return ["CoreMLExecutionProvider", "CPUExecutionProvider"]
@@ -275,7 +285,8 @@ class PlateReader:
     def __init__(self, detector_model="yolo-v9-s-608-license-plate-end2end",
                  ocr_model="cct-s-v2-global-model", device="cuda",
                  min_plate_width=100, min_conf=0.80, min_crop_width=None):
-        if device == "cuda":
+        is_cuda = device not in ("cpu", "mps")
+        if is_cuda:
             enable_onnx_cuda()
         from fast_alpr import ALPR  # imported lazily; heavy and optional
 
@@ -294,7 +305,7 @@ class PlateReader:
         # with the detector forced to CPU, because the OCR stage's own
         # CoreML session was the one actually crashing.
         force_cpu = os.environ.get("SENTINEL_FORCE_CPU_PLATES") == "1"
-        ocr_device = "cuda" if device == "cuda" else ("cpu" if force_cpu else "auto")
+        ocr_device = "cuda" if is_cuda else ("cpu" if force_cpu else "auto")
         self.alpr = ALPR(
             detector_model=detector_model,
             ocr_model=ocr_model,

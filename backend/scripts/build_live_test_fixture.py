@@ -44,8 +44,27 @@ from make_test_fixture import build_pan_clip  # noqa: E402
 _REPO_ROOT = os.path.abspath(os.path.join(_HERE, "..", ".."))
 _SURVEY_DIR = os.path.join(_REPO_ROOT, "backend", "survey")
 _MOT_DIR = os.path.join(_REPO_ROOT, "multi-object-tracking")
-_MOT_PYTHON = os.path.join(_MOT_DIR, ".venv", "bin", "python")
 _OUT_DIR = os.path.join(_REPO_ROOT, "fixtures", "live-test")
+
+
+def _resolve_mot_python() -> str:
+    """Find the worker venv's interpreter regardless of OS or venv naming.
+
+    Mirrors app/routers/analytics.py's _resolve_worker_python(): the build
+    spec assumes a POSIX `.venv/bin/python`, but a Windows venv is
+    `Scripts/python.exe`, and some machines have it as a plain `venv/`
+    (no dot) -- trying every combination is what makes this actually find
+    the interpreter on Windows instead of failing with FileNotFoundError.
+    """
+    for venv_name in (".venv", "venv"):
+        for rel in (("Scripts", "python.exe"), ("bin", "python")):
+            candidate = os.path.join(_MOT_DIR, venv_name, *rel)
+            if os.path.exists(candidate):
+                return candidate
+    return os.path.join(_MOT_DIR, ".venv", "bin", "python")  # default, for the "not found" error message
+
+
+_MOT_PYTHON = _resolve_mot_python()
 
 # Duplicated from multi-object-tracking/plates.py's INDIAN_PLATE_RE
 # (single-line constant, not worth a cross-venv import of fast_alpr/torch
@@ -117,7 +136,8 @@ def detect_bbox(image_path: str) -> dict:
 
 def _load_font(size: int) -> ImageFont.FreeTypeFont:
     for candidate in ("/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-                      "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"):
+                      "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                      "C:\\Windows\\Fonts\\arialbd.ttf"):
         if os.path.exists(candidate):
             return ImageFont.truetype(candidate, size)
     return ImageFont.load_default(size=size)

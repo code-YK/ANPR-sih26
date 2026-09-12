@@ -74,11 +74,6 @@ export default function TrackOverlayPlayer({ recordingId, runId, trackRef, first
     const canvas = canvasRef.current;
     if (!video || !canvas) return undefined;
 
-    function syncCanvasSize() {
-      canvas.width = video.clientWidth;
-      canvas.height = video.clientHeight;
-    }
-
     // A canvas 2D context can't consume a CSS custom property directly, so
     // it's read once from computed style rather than hardcoding a hex --
     // `--entity` is DESIGN.md's one colour for "a clickable identity", and
@@ -87,6 +82,19 @@ export default function TrackOverlayPlayer({ recordingId, runId, trackRef, first
     const entityColor = getComputedStyle(document.documentElement).getPropertyValue("--entity").trim() || "#5b8def";
 
     function draw() {
+      // Checked every frame rather than once at mount (previously) or via a
+      // resize-event listener (also tried): this effect runs before the
+      // video's metadata has loaded, so video.clientWidth/clientHeight are
+      // still the browser's placeholder size for an unloaded <video>, not
+      // the real, aspect-ratio-fitted size the max-width/max-height CSS
+      // settles on once the source loads -- a one-shot sync locks the
+      // canvas to that stale, usually-smaller size, so a box computed as a
+      // fraction of it draws outside where the video has since grown to.
+      // This keeps the two in lockstep unconditionally, independent of
+      // catching the exact moment the video's layout settles.
+      if (canvas.width !== video.clientWidth) canvas.width = video.clientWidth;
+      if (canvas.height !== video.clientHeight) canvas.height = video.clientHeight;
+
       const ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const boxes = boxesRef.current;
@@ -106,11 +114,8 @@ export default function TrackOverlayPlayer({ recordingId, runId, trackRef, first
       rafRef.current = requestAnimationFrame(draw);
     }
 
-    syncCanvasSize();
-    window.addEventListener("resize", syncCanvasSize);
     rafRef.current = requestAnimationFrame(draw);
     return () => {
-      window.removeEventListener("resize", syncCanvasSize);
       cancelAnimationFrame(rafRef.current);
     };
   }, [recordingId, runId, trackRef]);

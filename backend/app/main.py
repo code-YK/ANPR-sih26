@@ -19,7 +19,9 @@ from app.routers import (
     auth,
     cameras,
     catalogue_sources,
+    demo_mode,
     gap_analysis,
+    government_mode,
     hls_proxy,
     investigate,
     logs,
@@ -103,7 +105,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173", "http://127.0.0.1:5173",
+        "http://localhost:5173", "http://127.0.0.1:5173",  # frontend-v2 dev server
+        "http://localhost:5174", "http://127.0.0.1:5174",  # frontend-v3 dev server (fixed port, see its vite.config.js)
         "http://localhost:8000", "http://127.0.0.1:8000",
     ],
     allow_credentials=True,
@@ -131,6 +134,8 @@ app.include_router(analytics.router, prefix="/api", tags=["analytics"])
 app.include_router(hls_proxy.router, prefix="/api", tags=["hls-proxy"])
 app.include_router(webrtc.router, prefix="/api", tags=["webrtc"])
 app.include_router(investigate.router, prefix="/api", tags=["investigate"])
+app.include_router(demo_mode.router, prefix="/api", tags=["demo-mode"])
+app.include_router(government_mode.router, prefix="/api", tags=["government-mode"])
 
 
 @app.get("/api/health")
@@ -149,11 +154,17 @@ async def protected_docs(_auth: AuthContext = Depends(get_current_auth)):
 
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-_REACT_DIST_DIR = os.path.join(_REPO_ROOT, "frontend-v2", "dist")
+_REACT_DIST_DIR = os.path.join(_REPO_ROOT, "frontend-v3", "dist")
 
 # Static assets are public so the login page can load; all data/media APIs
 # called by the React application enforce authentication. The old vanilla UI
 # is deliberately not mounted because it has no login flow and would present
 # a misleading unauthenticated application shell.
+#
+# frontend-v3 is the served console: it is a strict superset of frontend-v2
+# (every view, context and hook, plus a loading screen and GSAP reveals), so
+# serving it loses nothing. frontend-v2 stays in the tree as the migration
+# reference its own README describes, and keeps its dev-server CORS entry
+# above so it can still be run side by side on port 5173.
 if os.path.isdir(_REACT_DIST_DIR):
     app.mount("/", StaticFiles(directory=_REACT_DIST_DIR, html=True), name="frontend")

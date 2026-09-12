@@ -309,8 +309,9 @@ def test_track_thumbnail(ctx: Ctx, run_id: int):
         return False, "no track has a thumb_path"
     ref = with_thumb[0]["track_ref"]
     resp = ctx.operator.get(f"/api/investigate/runs/{run_id}/tracks/{ref}/thumb")
-    ok = resp.status_code == 200 and resp.content[:2] == b"\xff\xd8"
-    return ok, f"HTTP {resp.status_code}, {len(resp.content)} bytes, JPEG magic={resp.content[:2] == b'\xff\xd8'}"
+    jpeg_magic = resp.content[:2] == b"\xff\xd8"
+    ok = resp.status_code == 200 and jpeg_magic
+    return ok, f"HTTP {resp.status_code}, {len(resp.content)} bytes, JPEG magic={jpeg_magic}"
 
 
 # --------------------------------------------------------------------------

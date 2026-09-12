@@ -28,8 +28,6 @@ class CameraOut(BaseModel):
     # Analytics can additionally consume RTSP/TCP. This is intentionally a
     # capability flag rather than an endpoint so it cannot leak source URLs.
     analytics_stream_available: bool
-    # Focused preview can be relayed to WHEP/WebRTC from RTSP or HLS.
-    webrtc_preview_available: bool
 
     codec: str | None
     width: int | None
@@ -838,3 +836,47 @@ class SubjectOut(BaseModel):
 
 class TrackLinkRequest(BaseModel):
     subject_id: int
+
+
+class DemoModeStatus(BaseModel):
+    enabled: bool
+    activated_at: str | None
+    camera_count: int
+    plate: str | None
+
+
+class DemoModeToggle(BaseModel):
+    enabled: bool
+
+
+class GovernmentModeStatus(BaseModel):
+    enabled: bool
+    activated_at: str | None
+    camera_ids: list[str]
+
+
+class GovernmentModeToggle(BaseModel):
+    enabled: bool
+
+
+class CameraSightingReportRow(BaseModel):
+    sequence: int
+    sighting_id: int
+    seen_at: datetime
+    plate: str | None
+    confidence: float | None
+    vehicle_type: str | None
+    evidence_url: str | None
+
+
+class CameraSightingReport(BaseModel):
+    camera_id: str
+    camera_name: str
+    location_text: str
+    department: str | None
+    generated_at: datetime
+    sighting_count: int
+    distinct_plate_count: int
+    first_seen: datetime | None
+    last_seen: datetime | None
+    rows: list[CameraSightingReportRow]

@@ -46,10 +46,31 @@ _STATE_DIR = os.path.join(_FIXTURE_DIR, "relay")
 _MANIFEST_PATH = os.path.join(_FIXTURE_DIR, "manifest.json")
 _PID_PATH = os.path.join(_STATE_DIR, "pids.json")
 _CONFIG_PATH = os.path.join(_STATE_DIR, "mediamtx.yml")
+# mediamtx and each ffmpeg publisher are meant to outlive this script (that's
+# the whole point of PID-file tracking) and outlive whatever spawned this
+# script too -- without this, Windows kills them the instant their parent
+# console gets Ctrl+C or closes, since a plain Popen child shares its
+# parent's console by default. CREATE_NEW_PROCESS_GROUP detaches them from
+# that console's control-event delivery; explicit stop/kill (SIGTERM via
+# os.kill, which Python maps to TerminateProcess on Windows) still works
+# unaffected, since that targets the PID directly rather than relying on
+# console signal propagation.
+_DETACHED = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {}
+# Same env var app/config.py's Settings.mediamtx_bin reads (see
+# webrtc_relay.py) -- this standalone script doesn't import pydantic-settings,
+# so it reads the var directly rather than hardcoding "mediamtx", which is
+# never on PATH on a machine that only has a project-local Windows binary.
+_MEDIAMTX_BIN = os.environ.get("MEDIAMTX_BIN", "mediamtx")
 
-RTSP_PORT = 8554
+
+# Deliberately NOT 8554/9997: those are app/pipeline/webrtc_relay.py's own
+# mediamtx ports (config.py's mediamtx_rtsp_port/mediamtx_api_port), started
+# unconditionally at every backend boot. Sharing them meant this relay could
+# never bind at all once a real mediamtx binary was actually installed --
+# the collision was previously silent only because that binary was missing.
+RTSP_PORT = 8557
 HLS_PORT = 8888
-API_PORT = 9997
+API_PORT = 9998
 
 # camera_id -> role, so a caller can address a camera the way the rest of
 # this fixture (seed_live_test.py, run_live_test.py) already does.
@@ -133,7 +154,7 @@ def _spawn_publisher(role: str, clip_path: str) -> int:
             "-c", "copy", "-f", "rtsp", "-rtsp_transport", "tcp",
             rtsp_url(role),
         ],
-        stdout=log_file, stderr=subprocess.STDOUT,
+        stdout=log_file, stderr=subprocess.STDOUT, **_DETACHED,
     )
     return proc.pid
 
@@ -150,7 +171,7 @@ def cmd_start(_args) -> int:
             f.write(_mediamtx_config())
         log_path = os.path.join(_STATE_DIR, "mediamtx.stdout.log")
         log_file = open(log_path, "ab")  # noqa: SIM115
-        proc = subprocess.Popen(["mediamtx", _CONFIG_PATH], stdout=log_file, stderr=subprocess.STDOUT)
+        proc = subprocess.Popen([_MEDIAMTX_BIN, _CONFIG_PATH], stdout=log_file, stderr=subprocess.STDOUT, **_DETACHED)
         pids["mediamtx"] = proc.pid
         _save_pids(pids)
         print(f"mediamtx started (pid={proc.pid})")

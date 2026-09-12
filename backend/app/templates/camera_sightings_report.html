@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sentinel Camera Sightings Report</title>
+<style>
+  @page { size: A4; margin: 2cm; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; font-size: 11pt; }
+  h1 { font-size: 20pt; margin-bottom: 0; }
+  .subtitle { color: #666; margin-top: 4px; margin-bottom: 24px; font-size: 10pt; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 9pt; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #ddd; vertical-align: top; }
+  tr { page-break-inside: avoid; break-inside: avoid; }
+  thead { display: table-header-group; }
+  th { background: #f2f2f2; }
+  .stat-row { display: flex; gap: 24px; margin: 12px 0 24px; }
+  .stat .n { font-size: 20pt; font-weight: 700; }
+  .stat .label { color: #666; font-size: 9pt; }
+  .empty { color: #888; font-style: italic; }
+  .note { color: #666; font-size: 9pt; margin-top: 24px; }
+</style>
+</head>
+<body>
+  <h1>Camera Sightings Report</h1>
+  <div class="subtitle">
+    {{ report.camera_name }} ({{ report.camera_id }}) &mdash; {{ report.location_text }}
+    {% if report.department %} &mdash; {{ report.department }}{% endif %}
+    &mdash; generated {{ report.generated_at.strftime('%Y-%m-%d %H:%M UTC') }}
+  </div>
+
+  <div class="stat-row">
+    <div class="stat"><div class="n">{{ report.sighting_count }}</div><div class="label">plate reads</div></div>
+    <div class="stat"><div class="n">{{ report.distinct_plate_count }}</div><div class="label">distinct plates</div></div>
+    <div class="stat">
+      <div class="n" style="font-size: 12pt;">
+        {% if report.first_seen %}{{ report.first_seen.strftime('%Y-%m-%d %H:%M') }}{% else %}&mdash;{% endif %}
+      </div>
+      <div class="label">first seen (UTC)</div>
+    </div>
+    <div class="stat">
+      <div class="n" style="font-size: 12pt;">
+        {% if report.last_seen %}{{ report.last_seen.strftime('%Y-%m-%d %H:%M') }}{% else %}&mdash;{% endif %}
+      </div>
+      <div class="label">last seen (UTC)</div>
+    </div>
+  </div>
+
+  {% if report.rows %}
+  <table>
+    <tr>
+      <th>#</th><th>Timestamp</th><th>Plate</th><th>Confidence</th><th>Vehicle type</th><th>Evidence</th>
+    </tr>
+    {% for r in report.rows %}
+    <tr>
+      <td>{{ r.sequence }}</td>
+      <td>{{ r.seen_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
+      <td>{{ r.plate }}</td>
+      <td>{{ '%.2f'|format(r.confidence) if r.confidence is not none else '—' }}</td>
+      <td>{{ r.vehicle_type or '—' }}</td>
+      <td>{{ r.evidence_url if r.evidence_url else '—' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty">No confirmed plate reads on record for this camera yet.</p>
+  {% endif %}
+
+  <p class="note">
+    Every confirmed plate read on this camera, independent of watchlist status -- see the Alerts view for
+    which of these (if any) matched an active watchlist entry. Evidence column shows the authenticated API
+    path for each sighting's evidence crop, where retained, not a public link.
+  </p>
+</body>
+</html>

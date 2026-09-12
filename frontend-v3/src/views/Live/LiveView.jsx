@@ -16,7 +16,7 @@ import FocusedPlayer from "./FocusedPlayer.jsx";
 // GOV-ING-012: every connected player is a separate stream copy on the
 // gateway. Keep the operator choice bounded; this is a preview budget, not
 // the separate, GPU-bound analytics-worker limit.
-const STREAM_LIMITS = [1, 3, 6, 9];
+const STREAM_LIMITS = [1, 3, 6, 9, 12];
 const DEFAULT_STREAM_LIMIT = 9;
 const STREAM_LIMIT_STORAGE_KEY = "sentinel-live-stream-limit";
 
@@ -38,18 +38,59 @@ export default function LiveView() {
   const [detectorMode, setDetectorMode] = useState("vehicle");
   const [detectorRestartKey, setDetectorRestartKey] = useState(0);
   const [streamLimit, setStreamLimit] = useState(initialStreamLimit);
+  const [demoModeOn, setDemoModeOn] = useState(false);
+  const [governmentModeOn, setGovernmentModeOn] = useState(false);
+  const [governmentCameraIds, setGovernmentCameraIds] = useState(() => new Set());
 
-  const filtered = useMemo(
-    () =>
-      cameras.filter((c) => {
-        if (dept && c.department !== dept) return false;
-        if (anpr === "true" && c.anpr_viable !== true) return false;
-        if (anpr === "false" && c.anpr_viable !== false) return false;
-        if (analyticsFilter === "true" && !c.analytics_enabled) return false;
-        return true;
-      }),
-    [cameras, dept, anpr, analyticsFilter]
-  );
+  usePolling(async () => {
+    try {
+      const [demoStatus, governmentStatus] = await Promise.all([
+        api("/admin/demo-mode"),
+        api("/admin/government-mode"),
+      ]);
+      setDemoModeOn(!!demoStatus.enabled);
+      setGovernmentModeOn(!!governmentStatus.enabled);
+      setGovernmentCameraIds(new Set(governmentStatus.camera_ids ?? []));
+    } catch {
+      // mode status is a nice-to-have here; a failed poll just leaves the grid as-is
+    }
+  }, 15000);
+
+  const filtered = useMemo(() => {
+    const result = cameras.filter((c) => {
+      if (dept && c.department !== dept) return false;
+      if (anpr === "true" && c.anpr_viable !== true) return false;
+      if (anpr === "false" && c.anpr_viable !== false) return false;
+      if (analyticsFilter === "true" && !c.analytics_enabled) return false;
+      // Only this view's own grid, not the shared CamerasContext -- the
+      // registry, GIS map, gap analysis, and the rail's own "N cameras
+      // live" count all read the unfiltered context and must keep
+      // showing the real full registry even while demo mode curates what
+      // the wall looks like. A catalogue/government-provided camera
+      // never gets a manual-N id (see cameras.py's _next_manual_camera_id
+      // comment), so this hides exactly the currently-unreachable real
+      // cameras without touching demo mode's own or any operator-added one.
+      if (demoModeOn && !c.camera_id.startsWith("manual-")) return false;
+      // Government mode is the mirror image: only real catalogue-
+      // provided cameras (see government_mode.py), so a manual/demo one
+      // is hidden here instead.
+      if (governmentModeOn && c.camera_id.startsWith("manual-")) return false;
+      return true;
+    });
+    // Control-room wall effect: while government mode is on, the handful of
+    // cameras it actually pointed at a working relay (see
+    // GovernmentModeStatus.camera_ids) sort first, so the grid opens on a
+    // wall of live feeds instead of interleaving them among the rest of the
+    // (currently-unreachable) catalogue in registry order.
+    if (governmentModeOn && governmentCameraIds.size > 0) {
+      return [...result].sort((a, b) => {
+        const aLive = governmentCameraIds.has(a.camera_id) ? 0 : 1;
+        const bLive = governmentCameraIds.has(b.camera_id) ? 0 : 1;
+        return aLive - bLive;
+      });
+    }
+    return result;
+  }, [cameras, dept, anpr, analyticsFilter, demoModeOn, governmentModeOn, governmentCameraIds]);
 
   const focusedCamera = cameras.find((c) => c.camera_id === focusedId) ?? null;
   const focusedHasStream = Boolean(

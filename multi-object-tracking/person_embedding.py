@@ -48,13 +48,37 @@ def _resolve_device() -> str:
     return "cpu"
 
 
+def _to_torch_device(device: str) -> str:
+    """Translate tracking_common.resolve_device()'s value into a torch one.
+
+    That function returns YOLO's device convention -- a bare index string
+    ("0", "1", ...) for CUDA -- because that is what ultralytics expects, and
+    every caller here passes its result straight through. torch does not
+    accept it: `backbone.to("0")` raises `Invalid device string: '0'`.
+
+    Same convention mismatch plates.py's _resolve_onnx_providers documents,
+    but with a louder failure mode: there it silently fell back to CPU, here
+    it crashed the process, so every *person* ingest run died at startup with
+    exit code 1 while vehicle runs (which never load this model) were fine.
+    """
+    # str() first: torch itself accepts a bare int index (`.to(0)`), so a
+    # caller passing one is reasonable and must not crash on .startswith().
+    device = str(device)
+    if device in ("cpu", "mps") or device.startswith("cuda"):
+        return device
+    # resolve_device()'s only other contract is a CUDA device index.
+    return f"cuda:{device}" if device.isdigit() else device
+
+
 def load(device: str | None = None):
     """Load (once; cached in module globals) and return the embedder.
     Safe to call repeatedly -- only the first call does any work."""
     global _model, _transform, _device
     if _model is not None:
         return _model
-    _device = device or _resolve_device()
+    # `is not None`, not truthiness: device index 0 is the common CUDA case
+    # and is falsy, so `if device` would silently ignore it and auto-resolve.
+    _device = _to_torch_device(device) if device is not None else _resolve_device()
     weights = torchvision.models.MobileNet_V3_Large_Weights.IMAGENET1K_V2
     backbone = torchvision.models.mobilenet_v3_large(weights=weights)
     backbone.classifier = torch.nn.Identity()  # keep the pooled 960-d feature, drop the 1000-way head
