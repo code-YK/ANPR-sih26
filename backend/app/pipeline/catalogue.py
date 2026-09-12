@@ -50,7 +50,7 @@ def _empty_to_none(value):
 
 def parse_sentinel_default(data: dict | list, browser_base_url: str) -> list[CatalogueCamera]:
     """Parses the one catalogue JSON shape this project has seen (see
-    docs/model1-build-spec.md's schema table). Split out from the HTTP fetch
+    docs/registry-gis-build-spec.md's schema table). Split out from the HTTP fetch
     below so both the original single-source sync and the newer named
     catalogue_sources adapter registry (app/pipeline/catalogue_sources.py)
     share this one proven-correct parser instead of duplicating it."""

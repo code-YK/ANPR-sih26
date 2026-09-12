@@ -1,37 +1,49 @@
-# Sentinel Model 1 backend
+# Backend - control plane and API
 
-FastAPI + PostgreSQL/PostGIS implementation of the camera registry and onboarding pipeline described in [../docs/model1-build-spec.md](../docs/model1-build-spec.md).
+FastAPI + PostgreSQL/PostGIS control plane for **SIH26127**. It owns the camera registry, the observation store, watchlist matching, alerting, trajectory reconstruction, RBAC, and the audit trail, and it supervises the analytics worker subprocesses and local media relays.
 
-The active operator console is `frontend-v2/`. FastAPI serves its production build at `/` when `frontend-v2/dist/` exists. The old vanilla UI remains in the repository as historical migration context but is not served because it has no authentication flow.
+Design context: [../docs/hld.md](../docs/hld.md) | [../docs/architecture.md](../docs/architecture.md) | [../docs/registry-gis-build-spec.md](../docs/registry-gis-build-spec.md)
+
+The served operator console is `frontend-v3/`. FastAPI serves its production build at `/` when `frontend-v3/dist/` exists. `frontend-v2/` is the previous console, retained as reference; `frontend/` is the original vanilla UI and is not served because it has no authentication flow.
+
+## Directory map
+
+| Path | Contents |
+|---|---|
+| `app/routers/` | HTTP surface: cameras, sightings, watchlist, alerts, analytics, investigate, auth, demo/government modes |
+| `app/services/` | Domain logic outliving a request: gap analysis, districts, demo and government mode |
+| `app/models/` | SQLAlchemy models: camera, sighting, alert, watchlist, track, recording, auth, analytics counts |
+| `app/pipeline/` | Media and ingest plumbing: capture, probe, media normalisation, catalogue sync, geocode, WebRTC relay |
+| `app/templates/` | Jinja templates for HTML/PDF report exports |
+| `migrations/` | Alembic migrations. Current head: `202608312000` |
+| `scripts/` | Seeds, smoke tests, relay launchers |
+| `fixtures/` | Committed, safe camera datasets (see `fixtures/README.md`) |
+| `survey/`, `recordings/`, `evidence/` | Runtime output, git-ignored |
 
 ## Prerequisites
 
-- Python 3.13
-- PostgreSQL 17 with the PostGIS extension available (on macOS: `brew install postgresql@17 postgis`)
-- `ffmpeg`/`ffprobe` on `PATH` (on macOS: `brew install ffmpeg`)
-- On macOS, WeasyPrint (used for the gap-analysis PDF export) needs Homebrew's native libs on the dynamic loader path: run the server with `DYLD_LIBRARY_PATH=/opt/homebrew/lib`.
+- **Python 3.11** (not 3.12+ - see [../SETUP.md](../SETUP.md))
+- PostgreSQL 16+ with PostGIS, **or** the team's hosted database
+- `ffmpeg` / `ffprobe` on `PATH`
+- `mediamtx` for live preview and the demonstration modes
 
 ## Setup
 
+Full instructions for Windows and Linux are in [../SETUP.md](../SETUP.md). In brief:
+
 ```bash
-# from the repository root
-python3.13 -m venv backend/.venv
+# Linux
+python3.11 -m venv backend/.venv
 backend/.venv/bin/pip install -r backend/requirements.txt
 
-# start Postgres and create the database once
-brew services start postgresql@17
-createdb sentinel
-psql -d sentinel -c "CREATE EXTENSION IF NOT EXISTS postgis;"
-
 cd backend
-cp .env.example .env
-# edit database URLs for your local user/socket and obtain sandbox endpoint
-# values through the approved team channel. Also set a long demo super-admin
-# password and a distinct worker token; never commit the populated .env.
+cp .env.example .env    # fill in database URLs, super-admin, worker token, MEDIAMTX_BIN
 .venv/bin/alembic upgrade head
 ```
 
-For offline registry/API work, leave the example `.invalid` sandbox URLs unchanged and do not call the live sync/probe/survey stages. Use the committed synthetic fixture described below.
+The database may be local PostgreSQL+PostGIS or the team's hosted instance; swapping between them is a two-line `.env` change, because nothing in the code hard-codes a DSN.
+
+For offline registry/API work, leave the example `.invalid` catalogue URLs unchanged and do not call the live sync/probe/survey stages. Use the committed fixtures described below.
 
 ## Safe synthetic demo data
 
@@ -47,30 +59,41 @@ It upserts only `demo-cam-*` cameras and watchlist entries from the dedicated
 `sentinel-synthetic-demo-v1` source. No stream URLs, credentials, footage, or
 real identifiers are included. See [fixtures/README.md](fixtures/README.md).
 
-## Build the active frontend
+## Government camera registry
+
+The real government camera nodes that government mode swaps stream URLs on. Without these rows the toggle has nothing to act on.
 
 ```bash
-# from the repository root
-cd frontend-v2
-npm ci
-npm run lint
-npm run build
+.venv/bin/python scripts/seed_government_cameras.py           # load / refresh
+.venv/bin/python scripts/seed_government_cameras.py --verify  # report what is present
+.venv/bin/python scripts/seed_government_cameras.py --reset   # remove (refuses if observed)
 ```
 
-Return to the repository root before starting the backend. A successful build creates `frontend-v2/dist/`, which FastAPI serves at `/`. For frontend development with hot reload, follow [../frontend-v2/README.md](../frontend-v2/README.md) instead.
+Safe to re-run: it updates metadata but deliberately **never** writes the stream-endpoint columns on an existing row, so re-seeding while government mode is active cannot tear its relay URLs out from under it. `--reset` refuses to delete a camera that already has sightings, alerts, or counts rather than failing on a foreign key.
+
+## Build the served frontend
+
+```bash
+npm --prefix frontend-v3 ci
+npm --prefix frontend-v3 run build
+```
+
+A successful build creates `frontend-v3/dist/`, which FastAPI serves at `/`. For hot-reload development, follow [../frontend-v3/README.md](../frontend-v3/README.md) instead.
 
 ## Run
 
 ```bash
 cd backend
-DYLD_LIBRARY_PATH="/opt/homebrew/lib" .venv/bin/uvicorn app.main:app --reload --port 8000
+.venv/bin/uvicorn app.main:app --reload --port 8000            # Linux
+.venv\Scripts\uvicorn.exe app.main:app --reload --port 8000    # Windows
 ```
 
 - UI: http://127.0.0.1:8000/
 - API docs (after login): http://127.0.0.1:8000/docs
 - Authenticated health check: http://127.0.0.1:8000/api/health
+- Live backend log stream: `GET /api/logs/backend` (SSE) - how to read a traceback when the server runs in a terminal you cannot see
 
-`DYLD_LIBRARY_PATH` is only needed on macOS/Homebrew for WeasyPrint's native libs (cairo/pango/gdk-pixbuf); it's a no-op elsewhere.
+WeasyPrint powers the HTML/PDF report exports. On Linux, install its native dependencies (cairo, pango, gdk-pixbuf) through your package manager if PDF export fails; the Windows wheels bundle what they need.
 
 At startup the backend idempotently creates the demo super admin from `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`, and `SUPER_ADMIN_NAME`. The secret is never embedded in source. Open the UI to sign in or submit a department registration request. Super admins approve department-admin requests; department admins approve employees in their own department. See [ADR 0003](../docs/decisions/0003-department-rbac.md).
 
@@ -101,6 +124,8 @@ cd backend
 .venv/bin/alembic upgrade head                 # apply
 .venv/bin/alembic downgrade -1                 # roll back one
 ```
+
+Write every migration to be **idempotent where it cheaply can be** (`if_not_exists` on index creation). The database is shared across machines, and a migration that assumes a clean schema fails on the second one.
 
 ## Tests
 

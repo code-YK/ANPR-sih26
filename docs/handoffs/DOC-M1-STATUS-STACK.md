@@ -1,5 +1,9 @@
 # Handoff: DOC-M1-STATUS-STACK
 
+> **Historical handoff.** Recorded under an earlier programme's framing and
+> requirement IDs. Left unedited as a record of that work. See
+> [ADR 0004](../decisions/0004-sih26127-rescope.md).
+
 Status: Superseded after integration into `main` in commit `f3108eb`.
 
 - Branch: `docs/module1-status-stack`
@@ -52,8 +56,8 @@ Review this diff, then reproduce backend setup and the non-ML smoke checks on th
 
 ## Decisions made
 
-- [ADR 0001](../decisions/0001-proposed-integration-shape.md): accepted Model 1 + direct Model 2 Phase 1 shape.
-- [ADR 0002](../decisions/0002-phase-1-implementation-stack.md): accepted Phase 1 stack and deferred distributed infrastructure.
+- [ADR 0001](../decisions/0001-integration-shape.md): accepted Model 1 + direct Model 2 Phase 1 shape.
+- [ADR 0002](../decisions/0002-implementation-stack.md): accepted Phase 1 stack and deferred distributed infrastructure.
 
 ## Decisions still open
 

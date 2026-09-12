@@ -1,8 +1,14 @@
-# Sentinel — Model 1 (Registry) + Onboarding: Build Spec
+# Camera Registry and Onboarding: Build Spec
+
+> **Historical build spec.** Written during an earlier programme whose
+> `Model N` vocabulary does not exist in SIH26127. Retained because it records
+> *why* this slice is built the way it is - the reasoning is still current even
+> where the naming is not. See [ADR 0004](decisions/0004-sih26127-rescope.md)
+> for the mapping, and [requirements.md](requirements.md) for current IDs.
 
 Status: Accepted implementation plan; incomplete against `GOV-M1-001` through `GOV-M1-008`
 
-Gujarat Police CCTV Hackathon 2026. This spec covers **only** the Model 1 registry and camera onboarding. ANPR, sightings ingestion, watchlist matching and the unified viewer are separate later stages — this document deliberately stops before them, but the schema anticipates them.
+This spec covers **only** the camera registry and onboarding. ANPR, sightings ingestion, watchlist matching and the unified viewer are separate later stages — this document deliberately stops before them, but the schema anticipates them.
 
 Target: working by **Aug 31**. Single Python process + PostgreSQL. No microservices, no message queue, no orchestration.
 
@@ -71,7 +77,7 @@ Deliberately denormalised — `department`, `ownership`, `camera_type` are const
 | `ownership` | text | yes | Operator — `government` \| `private` |
 | `camera_type` | text | yes | Operator — `fixed` \| `ptz` \| `analog` \| `ip` |
 | `connectivity` | text | yes | Operator — unavailable in sandbox, present for HLD completeness |
-| `storage_location` | text | yes | Operator — where footage actually lives (proves Model 1+2, not Model 4) |
+| `storage_location` | text | yes | Operator — where footage actually lives (registry metadata, not central recording) |
 | `retention_days` | int | yes | Operator — real range is 7 to 15+ |
 | `metadata_confidence` | text | yes | `confirmed` \| `inferred` — see §5 |
 | `is_live` | bool | yes | API `live` |
@@ -81,7 +87,7 @@ Deliberately denormalised — `department`, `ownership`, `camera_type` are const
 
 Indexes: `camera_id` (PK), `department`, `anpr_viable`, and a PostGIS geography index on `(longitude, latitude)`.
 
-### `sightings` (originally schema-only; now populated by Model 2)
+### `sightings` (originally schema-only; now populated by the ANPR pipeline)
 
 | Column | Type | Notes |
 |---|---|---|
@@ -164,7 +170,7 @@ The UI must display this distinction — a badge, muted styling, anything visibl
 
 ## 6. Gap analysis report
 
-A Model 1 deliverable (playbook §3). Three sections; the second is the strongest and should lead.
+A registry deliverable. Three sections; the second is the strongest and should lead.
 
 **Capability gaps (lead with this).** Cameras that exist but cannot read plates — `anpr_viable = false`. Output per camera: location, department, reason (night/angle/distance/resolution), and a flag for replacement priority. Framed as a procurement recommendation: *"these N junctions are covered by a camera but not by ANPR capability; prioritise upgrade here."*
 
@@ -195,7 +201,7 @@ GET  /api/gap-analysis            report data as JSON
 GET  /api/gap-analysis/export     HTML/PDF
 ```
 
-Documented API is itself a Model 1 deliverable — keep an OpenAPI spec or equivalent alongside.
+Documented API is itself a registry deliverable — keep an OpenAPI spec or equivalent alongside.
 
 ---
 
@@ -206,9 +212,9 @@ Do not build the following speculative infrastructure for this increment:
 - Kafka, RabbitMQ, Kubernetes, microservice split
 - Separate `departments` / `camera_types` lookup tables
 - Vehicle re-identification or appearance embeddings
-- Central video storage or recording (that is Model 4; this build is Model 1 + 2)
+- Central video storage or recording (out of scope; this build is metadata-first)
 
-Department authentication/RBAC, registry text/type filtering, department-scoped CSV/JSON exports, health-oriented GIS markers, optional indicative coverage planning rings, probe-health and maintenance work-order history, and state-change/export/read/denial audit events are implemented under ADR 0003. Database migration `202608311800` also rejects application-role audit-row updates and deletes, except the required account-deletion FK cleanup. A super-admin-only canonical NDJSON audit archive can be downloaded or delivered once-only to an administrator-configured external mount with a SHA-256 digest. Authenticated browser GIS and protocol-compatible health-recovery evidence are recorded, and the project owner confirms official catalogue sync is operational. Provisioning/testing an approved WORM/object-lock retention destination and a redacted official demonstration record remain mandatory Model 1 work; they cannot be deferred solely by this build spec.
+Department authentication/RBAC, registry text/type filtering, department-scoped CSV/JSON exports, health-oriented GIS markers, optional indicative coverage planning rings, probe-health and maintenance work-order history, and state-change/export/read/denial audit events are implemented under ADR 0003. Database migration `202608311800` also rejects application-role audit-row updates and deletes, except the required account-deletion FK cleanup. A super-admin-only canonical NDJSON audit archive can be downloaded or delivered once-only to an administrator-configured external mount with a SHA-256 digest. Authenticated browser GIS and protocol-compatible health-recovery evidence are recorded, and the project owner confirms official catalogue sync is operational. Provisioning/testing an approved WORM/object-lock retention destination and a redacted official demonstration record remain open registry/GIS work (`SIH-NFR-002`); they cannot be deferred solely by this build spec.
 
 ---
 

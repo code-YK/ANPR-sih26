@@ -1,5 +1,13 @@
 # Sandbox Access Runbook
 
+> **Scope note (2026-09-12).** SIH26127 supplies **no dataset and no sandbox** -
+> the problem-statement listing records `Dataset Link: N/A`. This document
+> describes the HTTP camera-catalogue connector inherited from a previous
+> programme, which survives as **one source adapter among several**, alongside
+> manual onboarding, CSV bulk import, and the recorded-feed relay used by
+> government mode. Nothing here is an SIH26127 requirement. See
+> [ADR 0004](decisions/0004-sih26127-rescope.md).
+
 Status: local access observations recorded 2026-08-28; security review updated 2026-08-30; sandbox access model replaced 2026-09-01 (see bottom section — the catalogue transport gap below is now resolved).
 
 This is a redacted development runbook for the current sandbox. It records what a team member observed from a local network; it is not an official protocol specification or proof of portal entitlement. The official resource guide remains authoritative. See [source-register.md](source-register.md).
@@ -96,7 +104,7 @@ Do not download or record sandbox footage. Routine diagnostics may inspect bound
 | HTTPS `/stream/<id>` with `curl -O` | The server returned an 8 MiB partial MP4 response, not the complete object. | Never use it as a media-download or analytics path. |
 | `ffprobe` on that 8 MiB file | `moov atom not found`. | The partial MP4 lacks the index metadata and cannot yield reliable media properties. |
 
-The HTTPS fallback is suitable for a browser player, whose range requests can obtain the MP4 index and the portions needed for viewing. It is not an approved substitute for real-time worker ingestion. `GOV-ING-010` and `GOV-ING-015` prohibit a download-then-analyse design.
+The HTTPS fallback is suitable for a browser player, whose range requests can obtain the MP4 index and the portions needed for viewing. It is not an approved substitute for real-time worker ingestion. `SIH-ING-010` and `SIH-ING-015` prohibit a download-then-analyse design.
 
 ## Safe endpoint extraction for diagnostics
 

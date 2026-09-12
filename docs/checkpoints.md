@@ -1,6 +1,6 @@
 # Checkpoints and Acceptance Criteria
 
-Dates are aggressive because the official submission deadline is 2026-09-07. Adjust owners, not exit criteria, when work moves. A checkpoint is complete only when its evidence is on `main` and another teammate can reproduce it.
+Dates are aggressive because the official submission deadline is 2026-09-30. Adjust owners, not exit criteria, when work moves. A checkpoint is complete only when its evidence is on `main` and another teammate can reproduce it.
 
 ## Checkpoint summary
 
@@ -9,13 +9,13 @@ Dates are aggressive because the official submission deadline is 2026-09-07. Adj
 | `C0` | 2026-08-28 | Documentation and source-of-truth baseline | - |
 | `C1` | 2026-08-29 | Architecture, stack, schemas, and team lanes frozen | `v0.1-contracts` |
 | `C2` | 2026-08-30 | Resilient catalogue-driven camera ingestion | `v0.2-camera-ingestion` |
-| `C3` | 2026-08-31 | Model 1 registry, GIS, health, and onboarding | `v0.3-registry-gis` |
+| `C3` | 2026-08-31 | registry/GIS registry, GIS, health, and onboarding | `v0.3-registry-gis` |
 | `C4` | 2026-09-02 | ANPR, watchlist matching, and real-time alerts | `v0.4-alerting` |
 | `C5` | 2026-09-03 | Cross-camera vehicle journey and searchable evidence | `v0.5-vehicle-journey` |
 | `C6` | 2026-09-04 | Integrated government-feed rehearsal and reliability | `v0.6-integrated-demo` |
 | `C7` | 2026-09-05 | HLD, scale/cost plan, presentation, and reports | `v0.9-submission-candidate` |
 | `C8` | 2026-09-06 | Clean-machine dress rehearsal and submission audit | `v1.0-submission` |
-| `C9` | 2026-09-07 | Submission completed and receipt retained | - |
+| `C9` | 2026-09-30 | Submission completed and receipt retained | - |
 
 ## C0 - Documentation baseline
 
@@ -26,7 +26,7 @@ Dates are aggressive because the official submission deadline is 2026-09-07. Adj
 
 ## C1 - Architecture and contract freeze
 
-- [ ] Eligibility category, registration owner, and sandbox-access status are confirmed.
+- [ ] Eligibility category, registration owner, and camera source-access status are confirmed.
 - [x] ADR 0001 is accepted or replaced.
 - [x] Application stack and canonical package sources are chosen in ADR 0002; native/demo-machine and ML lock evidence remains a C8 gap.
 - [ ] Camera, Observation, WatchlistEntry, Alert, and Journey contracts are agreed.
@@ -61,9 +61,9 @@ Current state: implementation exists for the registry, manual/catalogue onboardi
 - [x] Authenticated browser evidence demonstrates map rendering and department/type/status filtering, coverage rings, and unplaced assets; see `artifacts/public/checkpoint-c3/gis-coverage-layer-browser-2026-08-31.md`.
 - [x] Probe-derived health reason/history, last-successful transport state, and application-append-only maintenance work-order history are visible; synthetic offline/lifecycle/role-boundary verification and protocol-compatible interruption/recovery evidence pass. Official-live evidence remains open.
 - [x] Text/type search and filtered CSV/JSON export work; synthetic super-admin and viewer/cross-department-grant verification passes.
-- [x] A committed metadata-only camera and watchlist fixture can be seeded and verified without sandbox, media, or ML access.
+- [x] A committed metadata-only camera and watchlist fixture can be seeded and verified without camera source, media, or ML access.
 - [x] Audit events identify actor, action, target, and result for implemented security/state-change/read/denial actions; current synthetic verification passes, the application database role cannot update/delete audit rows, and a super admin can download or deliver a digest-verifiable audit archive. Provisioning/testing an immutable retention destination and database-superuser bypass controls remain `GOV-NFR-003` gaps.
-- [x] A synthetic coverage/ageing gap report is generated in JSON, HTML, and PDF; it contains only committed safe fixture data. Live/statewide report evidence remains open.
+- [x] A synthetic coverage/ageing gap report is generated in JSON, HTML, and PDF; it contains only committed safe fixture data. Live/city-wide report evidence remains open.
 
 ## C4 - ANPR, watchlist, and alerts
 

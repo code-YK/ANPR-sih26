@@ -1,3 +1,17 @@
+# Backend dependencies for SIH26127.
+#
+# Target interpreter: Python 3.11 (see SETUP.md). Verified against 3.11.9 on
+# Windows and Linux. Every version here is pinned exactly on purpose - this is
+# the reproducibility contract referenced by ADR 0002 and SIH-NFR-008.
+#
+# Install:
+#   Linux    python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt
+#   Windows  py -3.11 -m venv .venv;  .venv\Scripts\pip.exe install -r requirements.txt
+#
+# weasyprint powers the HTML/PDF report exports. On Linux it needs native
+# cairo/pango/gdk-pixbuf from your package manager; the Windows wheels bundle
+# what they need.
+
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 sqlalchemy==2.0.36

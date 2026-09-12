@@ -47,7 +47,7 @@ Use imperative, scoped messages such as:
 ```text
 feat(ingest): discover streams from catalogue
 fix(alerts): deduplicate repeated plate matches
-docs(requirements): link GOV-DEMO-004 evidence
+docs(requirements): link SIH-DEMO-004 evidence
 ```
 
 Do not commit generated media, credentials, private feed URLs, large datasets, model weights without an explicit storage decision, or machine-specific configuration.

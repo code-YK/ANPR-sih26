@@ -1,121 +1,148 @@
-# Sentinel Gujarat CCTV Integration
+# Sentinel — City-Wide AI Engine for Multi-Camera ANPR Trajectory Tracking and Urban Traffic Analytics
 
-Working repository for the Gujarat Police Innovation Hackathon 2026 CCTV Integration Challenge.
+Working repository for **Smart India Hackathon 2026, Problem Statement SIH26127**, proposed by **Bharat Electronics Limited (BEL)**.
 
-The goal is to deliver a functioning, open-source platform that:
+| | |
+|---|---|
+| Problem Statement ID | **SIH26127** (S.No. 127) |
+| Title | City-Wide AI Engine for Multi-Camera ANPR Trajectory Tracking and Urban Traffic Analytics |
+| Organisation / Department | Bharat Electronics Limited (BEL) |
+| Category | Software |
+| Theme | Transportation & Logistics |
+| Idea submission deadline | **2026-09-30** |
+| Dataset supplied by organiser | None (`N/A` on the problem-statement listing) |
 
-- maintains the mandatory central CCTV registry and GIS map;
-- consumes heterogeneous camera feeds without disrupting existing departmental systems;
-- performs ANPR and other video analytics;
-- continuously matches observations against representative watchlists;
-- generates real-time, auditable alerts;
-- reconstructs a vehicle's timestamped movement across cameras; and
-- presents a credible path from the approximately 50-camera sandbox to approximately 80,000 cameras statewide.
+> `Sentinel` is this team's internal codename for the platform. It is not a BEL or SIH product name.
 
-The official challenge website is the authority. Repository documents translate the official material into implementation work and acceptance evidence; they do not replace the official rules.
+## The problem, in the organiser's terms
+
+Cities already run large CCTV and ANPR estates, but most systems **process those feeds in isolated silos** — reading plates without linking observations across space and time. Authorities therefore cannot automatically follow a vehicle of interest between sectors, and cannot extract macro-level movement trends from cameras they already own.
+
+The platform must therefore do three things across a **city-wide, multi-camera** network:
+
+1. **High-accuracy ANPR/OCR** — >90 % recognition across varying lighting, poor weather, angled shots, motion blur, and dirty or damaged plates.
+2. **Single-plate trajectory tracking** — reconstruct any one plate's complete travel path across the city, with movement history, timestamps, direction, and route drawn on a GIS map.
+3. **Macro traffic flow and movement analytics** — traffic density, origin–destination patterns, congestion bottlenecks, and real-time heatmaps from the aggregated camera data.
+
+## The four expected components, and where each stands
+
+The problem statement names four components. This table is the honest, one-glance status; the per-requirement detail and evidence live in [docs/requirements.md](docs/requirements.md).
+
+| # | Expected component | State | What exists today |
+|---|---|---|---|
+| 1 | **High-Precision OCR Module** (>90 % on multi-lane streams) | In progress | YOLO11 + ByteTrack + fast-alpr running on CUDA, confirmed reading real Indian plates at 0.88–1.00 confidence with vote-based confirmation. **The >90 % figure is not yet measured** — that needs ground-truth labelled footage this repository does not have. |
+| 2 | **Trajectory Reconstruction Engine** (query-based, chronological, on a map) | In progress | Query any plate → ordered stops with camera, coordinates, source timestamp, confidence, evidence crop; timeline + numbered route map; JSON/CSV/HTML/PDF export. Direction and corridor speed exist on an unmerged branch (see below). |
+| 3 | **City Traffic Analytics Dashboard** (heatmaps, speeds, route density, flow trends) | Partially built, **unmerged** | Built on the `new-implementations` branch: corridor transit, density over time, congestion vs. baseline, origin/destination node pairs, read-yield, four-format export, and a `Traffic` console view. Not yet on `main` and never run against a live database. |
+| 4 | **Alert System** (blacklisted vehicles + suspicious route anomalies) | In progress | Blacklist alerting works end to end — watchlist match → deduplicated alert → operator acknowledge/resolve, all audited. **Route-anomaly** detection (dwell, looping, implausible transit) is implemented in the same unmerged analytics branch. |
+
+## Current state, plainly
+
+A working vertical slice runs today: **camera registry → live feed → ANPR → sighting → watchlist alert → cross-camera journey on a GIS map**, with an authenticated React operator console, department-scoped RBAC, and an audit trail.
+
+Verified on this machine (2026-09-12):
+
+- 16 government cameras onboarded with real coordinates; a five-camera corridor along Ahmedabad's SG Highway is `exact`-geocoded specifically so trajectory and corridor analytics have real geometry to work with.
+- ANPR reading 13 distinct plates from a live relayed feed, writing `sightings`, and raising watchlist alerts.
+- Offline forensic search (**Investigate**) ingesting an uploaded recording: 158 vehicle tracks and 154 person tracks with appearance embeddings, plate search, and person-photo search.
+
+Not yet true, and deliberately not claimed:
+
+- No measured OCR accuracy figure against ground truth.
+- The traffic-analytics dashboard is not merged to `main`.
+- No per-camera speed or heading — **no camera in the registry is calibrated**, and some are PTZ. Corridor speed ships as a straight-line *lower bound*, never a speeding finding. See [`docs/requirements.md`](docs/requirements.md) `SIH-ANLY-006`.
+- Scale, cost, and production-security narratives are not written.
 
 ## Start here
 
-Read these files in order before starting work:
+Read in this order before changing anything:
 
-1. [PROJECT_STATE.md](PROJECT_STATE.md) - current status, risks, and next decisions.
-2. [docs/requirements.md](docs/requirements.md) - authoritative requirement ledger and traceability matrix.
-3. [docs/approach.md](docs/approach.md) - recommended execution plan for a three-person team.
-4. [docs/architecture.md](docs/architecture.md) - accepted Phase 1 system shape and data flow.
-5. [DESIGN.md](DESIGN.md) - merged operator-console visual direction, tokens, component rules, and remaining evidence gaps.
-6. [docs/checkpoints.md](docs/checkpoints.md) - dated milestones and exit criteria.
-7. [docs/context-management.md](docs/context-management.md) - cross-machine and cross-LLM collaboration protocol.
-8. [docs/sandbox-access.md](docs/sandbox-access.md) - redacted local sandbox access checks, limits, and safe diagnostic commands.
-9. [AGENTS.md](AGENTS.md) - operating rules for coding agents.
-
-## Current state
-
-The Phase 1 application stack is implemented, but the mandatory checkpoints are not complete. The repository contains a FastAPI/PostgreSQL/PostGIS backend, an authenticated React operator console, an unserved legacy UI reference, and separate media/analytics workers. Model 1 registry/onboarding/GIS/reporting basics, department RBAC/state-change/read/denial audit, server-enforced registry search/type filtering, scoped CSV/JSON export, health and maintenance history, health-oriented GIS planning controls, database-trigger audit immutability, and digest-verifiable archive export/delivery exist alongside a Model 2 observation-to-alert-to-journey slice. Browser GIS and synthetic reliability evidence are recorded, the second-machine rehearsal has been human-confirmed, and the project owner confirms that official catalogue sync is operational. Provisioned WORM/object-lock archive retention, official/live demonstration evidence, and other requirement-ledger gaps remain. See [PROJECT_STATE.md](PROJECT_STATE.md).
-
-## Accepted solution direction
-
-ADR 0001 accepts:
-
-- mandatory Model 1 registry and GIS foundation;
-- Model 2-style direct feed integration for the Phase 1 sandbox;
-- a stable connector interface inspired by Model 3 so source-specific logic is replaceable;
-- metadata-first, edge-ready analytics so the scale story does not require centralising every video stream; and
-- a thin vertical slice first: one catalogue-driven stream -> ANPR observation -> watchlist match -> alert -> GIS journey.
-
-This is a team implementation decision, not an official rule. See [ADR 0001](docs/decisions/0001-proposed-integration-shape.md) and the accepted stack in [ADR 0002](docs/decisions/0002-phase-1-implementation-stack.md).
+1. [SETUP.md](SETUP.md) — get it running on Windows or Linux.
+2. [PROJECT_STATE.md](PROJECT_STATE.md) — current status, risks, open decisions.
+3. [docs/requirements.md](docs/requirements.md) — the requirement ledger and traceability matrix.
+4. [docs/hld.md](docs/hld.md) — High-Level Design, with architecture diagrams.
+5. [docs/architecture.md](docs/architecture.md) — component responsibilities and data flow.
+6. [docs/decisions/](docs/decisions/) — accepted architecture decisions (ADRs).
+7. [AGENTS.md](AGENTS.md) — operating rules for coding agents and contributors.
 
 ## Repository layout
 
 ```text
 .
-|-- README.md
-|-- AGENTS.md
-|-- PROJECT_STATE.md
-|-- CONTRIBUTING.md
-|-- backend/
-|-- frontend-v2/
-|-- frontend/
-|-- multi-object-tracking/
-|-- docs/
-|   |-- requirements.md
-|   |-- approach.md
-|   |-- architecture.md
-|   |-- checkpoints.md
-|   |-- context-management.md
-|   |-- api.md
-|   |-- source-register.md
-|   |-- sandbox-access.md
-|   |-- task-template.md
-|   |-- decisions/
-|   `-- handoffs/
-`-- .github/
-    |-- pull_request_template.md
-    `-- ISSUE_TEMPLATE/
+├── backend/                  FastAPI + PostgreSQL/PostGIS control plane and API
+│   ├── app/                  routers, services, models, media pipeline
+│   ├── migrations/           Alembic migrations
+│   ├── scripts/              seeds, smoke tests, relay launchers
+│   └── fixtures/             safe synthetic + government camera fixtures
+├── frontend-v3/              React 19 + Vite operator console  ← served at /
+├── frontend-v2/              previous console, retained as reference
+├── frontend/                 original vanilla UI, unserved, historical
+├── multi-object-tracking/    ANPR / person / suspicious / ingest workers (own venv)
+├── docs/                     requirements, HLD, architecture, ADRs, testing guides
+├── artifacts/                dated, redacted verification evidence packets
+└── sandbox-test/             standalone client used to probe a camera catalogue
 ```
 
-`frontend-v2/` is the active and only served operator console. `frontend/` is retained as migration history but is not mounted because it has no authentication flow. The backend and analytics worker remain separate processes even though the backend is a modular monolith.
+Each of those directories has its own `README.md` describing its contents in depth.
+
+Three directories are **required to run the demo but deliberately not in Git** — see [SETUP.md](SETUP.md#external-assets-not-in-git):
+
+- `recorded-streams/` — real government-feed recordings (~673 MB) replayed by government mode
+- `tools/` — the `mediamtx` binary (per-OS, not vendored)
+- `multi-object-tracking/*.pt`, `*.onnx` — model weights
+
+## Technology
+
+| Layer | Choice |
+|---|---|
+| Backend | Python 3.11, FastAPI, SQLAlchemy 2, Alembic, Uvicorn |
+| Database | PostgreSQL 16+ with PostGIS (currently hosted on Neon, PostgreSQL 18.6 / PostGIS 3.6.4) |
+| Frontend | React 19, Vite 8, React Router, React Leaflet, GSAP |
+| ANPR / CV | YOLO11, ByteTrack, fast-alpr, ONNX Runtime (CUDA), OpenCV |
+| Media | FFmpeg / ffprobe, MediaMTX (RTSP/HLS/WHEP relay) |
+
+Exact pinned versions are in [docs/decisions/0002-implementation-stack.md](docs/decisions/0002-implementation-stack.md), `backend/requirements.txt`, and `frontend-v3/package-lock.json`.
+
+## Demo and government modes
+
+Two super-admin toggles in **Access admin → Advanced** let the platform run without reachable live cameras, without changing any downstream logic:
+
+- **Government mode** — repoints already-onboarded cameras at a local MediaMTX relay serving real recorded government footage. Onboarding, ANPR, trajectory, analytics, and alerting all run *completely unmodified*, because as far as the rest of the system is concerned these are just that camera's stream URLs. Turning it off restores the original URLs.
+- **Demo mode** — the mirror image: hides catalogue cameras and stands up a small synthetic rehearsal environment.
+
+The two are mutually exclusive. Details in [docs/demo-and-government-modes.md](docs/demo-and-government-modes.md).
 
 ## Branch and review workflow
 
-`main` is the shared working source of truth. After this documentation baseline is accepted, all work should happen on short-lived branches and return through pull requests.
-
-Examples:
+`main` is the shared source of truth. Work on short-lived branches and return through pull requests.
 
 ```text
-feat/camera-ingestion
-feat/anpr-watchlist-alerts
-feat/gis-vehicle-tracking
-feat/dashboard
+feat/ocr-accuracy-benchmark
+feat/traffic-analytics-merge
+fix/trajectory-ambiguous-match
 docs/submission-package
-fix/alert-deduplication
 ```
 
-Rules:
+1. Pull the latest `main` before branching.
+2. One branch, one independently reviewable outcome.
+3. Link every PR to requirement IDs from [docs/requirements.md](docs/requirements.md).
+4. Another teammate reviews.
+5. Merge only when the demo still runs and the evidence is recorded.
+6. Delete the branch after merge.
 
-1. Pull the latest `main` before creating a branch.
-2. Keep one branch focused on one independently reviewable outcome.
-3. Link every PR to requirement IDs and checkpoint acceptance criteria.
-4. Another teammate reviews the PR.
-5. Merge only when the shared demo still runs and the evidence is recorded.
-6. Delete the feature branch after merge.
-7. Tag stable checkpoints, for example `v0.1-camera-ingestion`, `v0.2-alerting`, and `v1.0-submission`.
+There is no permanent `develop` branch.
 
-A permanent `develop` branch is intentionally not used.
+### Active branches
 
-## Setup and run commands
-
-The API and persistence layer live in `backend/`. The active React console lives in `frontend-v2/`; a production build is served by FastAPI when `frontend-v2/dist/` exists. The vanilla `frontend/` is retained only as an unserved migration reference. The separate ANPR/person analytics environment is documented in [multi-object-tracking/README.md](multi-object-tracking/README.md). See [backend/README.md](backend/README.md) and [frontend-v2/README.md](frontend-v2/README.md).
-
-The authenticated general smoke suite covers registry CRUD, health and maintenance history, CSV updates, catalogue sync, gap-report exports, watchlists, observations, matching, alerts, and journeys. A separate synthetic RBAC suite covers roles, approvals, grants, read/denial audit, maintenance controls, database-level audit immutability, and digest-verifiable archive download/delivery. They do not prove all-camera probe/survey/geocode completion, a provisioned immutable retention policy, official/live feed health, production identity security, or ML accuracy. A same-host clean-clone rehearsal passed on Python 3.13, and the project owner has confirmed a teammate second-machine rehearsal; keep a redacted reviewer transcript with the submission materials.
+- `main` — integrated reality.
+- `new-implementations` — city-wide traffic-flow analytics (expected component 3) plus route anomalies. Unit-tested (15/15, no database) but never exercised against a running backend. See [PROJECT_STATE.md](PROJECT_STATE.md) for the merge considerations.
 
 ## Source priority
 
-When sources disagree, use this order:
+When sources disagree:
 
-1. Current official Sentinel website and authenticated challenge resources.
-2. Official announcements or direct organiser clarification.
-3. Accepted repository decisions and merged contracts.
-4. The supplied Sentinel Playbook and other secondary summaries.
-5. Chat history, agent memory, or local notes.
+1. The official SIH 2026 problem-statement listing for SIH26127 and any organiser clarification.
+2. The supplied BEL requirements document.
+3. Accepted repository decisions (ADRs) and merged contracts.
+4. Chat history, agent memory, or local notes — lowest.
 
 See [docs/source-register.md](docs/source-register.md) for verification status and known ambiguities.

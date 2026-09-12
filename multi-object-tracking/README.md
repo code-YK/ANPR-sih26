@@ -1,53 +1,112 @@
-# Sentinel analytics workers
+# Analytics workers
 
-This directory contains the heavy, separate Python environment for the live
-analytics workers. It is intentionally separate from `backend/.venv`: the
-backend starts a worker as a subprocess and receives observations or aggregate
-counts over HTTP.
+The GPU-side of SIH26127. This directory holds a **separate Python environment**
+from `backend/.venv` on purpose: the backend spawns a worker as a subprocess and
+receives observations or aggregate counts back over HTTP with a service token,
+so the workers never hold a database credential.
+
+Everything here runs **locally**, on the machine with the GPU. Only the database
+is remote. Video never leaves the host; only derived metadata is persisted.
 
 Use the backend's analytics endpoints for normal operation. They select the
 registered stream source, force RTSP/TCP when RTSP is used, and keep worker
 lifecycle, logs, and the bounded concurrency limit visible to the operator
 console.
 
+## What each worker does
+
+| Script | Role |
+|---|---|
+| `observation_worker.py` | **ANPR.** YOLO11 detect -> ByteTrack -> fast-alpr OCR -> vote -> `POST /api/sightings` |
+| `person_observation_worker.py` | Person counting; posts aggregate windows, never identities |
+| `suspicious_observation_worker.py` | Purpose-trained suspicious-activity classifier -> standalone alerts |
+| `recording_ingest_worker.py` | **Offline forensic ingest** of an uploaded recording (Investigate) |
+| `person_embedding.py` | One appearance embedding per person track, for photo search |
+| `person_search.py` | Embeds a single query photo for ranked candidate search |
+| `plates.py` | Plate detection, OCR, and the per-track vote that decides a confirmed read |
+| `camera_feeds.py` | Live capture, PTS/program-date-time anchoring, reconnect/backoff |
+| `tracking_common.py` | Shared device resolution, tracker config, drawing helpers |
+| `record_live_clips.py` | Records live feeds into `recorded-streams/` for government mode |
+
 ## Prerequisites
 
-- The backend is running and its database migrations have been applied.
-- The authorised sandbox catalogue URL is configured in `backend/.env`, and
-  the desired camera has been synchronised into the registry.
-- `WORKER_API_TOKEN` is configured in `backend/.env`; the backend passes it
-  to subprocesses as `SENTINEL_WORKER_API_TOKEN` so ingestion cannot reuse a
-  human browser session.
-- Python 3.13 and `ffmpeg` are available on `PATH`.
+- The backend is running and its migrations have been applied.
+- The target camera exists in the registry.
+- `WORKER_API_TOKEN` is configured in `backend/.env`; the backend passes it to
+  subprocesses as `SENTINEL_WORKER_API_TOKEN` so ingestion cannot reuse a human
+  browser session.
+- **Python 3.11** and `ffmpeg` on `PATH`.
+- An NVIDIA GPU with CUDA 12.8+ (mandatory on RTX 50-series / Blackwell, sm_120).
 
-Do not put catalogue URLs, stream URLs, tokens, or observed identifiers in
-this README, commands copied into Git, or worker logs.
+Do not put catalogue URLs, stream URLs, tokens, or observed identifiers in this
+README, in commands copied into Git, or in worker logs.
 
-## macOS / Apple Silicon setup
+## Setup
 
-Create the worker environment from the repository root:
+**Install PyTorch from the CUDA index first.** A plain `pip install torch` on
+Windows silently installs a CPU-only wheel - roughly 15x slower, with no error.
 
-```zsh
-cd multi-object-tracking
-python3.13 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install torch torchvision ultralytics opencv-python numpy fast-alpr onnxruntime
+```bash
+# Linux
+python3.11 -m venv multi-object-tracking/.venv
+multi-object-tracking/.venv/bin/pip install --index-url https://download.pytorch.org/whl/cu128 torch torchvision
+multi-object-tracking/.venv/bin/pip install -r multi-object-tracking/requirements.txt
 ```
 
-The checked-in `requirements.txt` includes CUDA packages for NVIDIA/Windows
-development. Do not install it unchanged on macOS. PyTorch automatically uses
-Apple Metal (`mps`) when it is available; `onnxruntime` is the portable OCR
-runtime for this setup.
-
-Verify the environment:
-
-```zsh
-python -c "import torch; print(torch.__version__); print('MPS available:', torch.backends.mps.is_available())"
+```powershell
+# Windows
+py -3.11 -m venv multi-object-tracking\.venv
+multi-object-tracking\.venv\Scripts\pip.exe install --index-url https://download.pytorch.org/whl/cu128 torch torchvision
+multi-object-tracking\.venv\Scripts\pip.exe install -r multi-object-tracking\requirements.txt
 ```
 
-The first worker start can download the YOLO model weights, so it may take
-longer than later starts.
+### Verify the GPU is really being used
+
+`torch.cuda.is_available()` alone is not enough - check the architecture is in
+the compiled arch list and that a kernel actually launches:
+
+```bash
+python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_capability(0), torch.cuda.get_arch_list())"
+```
+
+Expected on an RTX 5060: `2.11.0+cu128 True (12, 0) [... 'sm_120']`.
+
+Then confirm ANPR itself landed on CUDA rather than silently falling back:
+
+```bash
+python -c "import plates; print(plates.PlateReader(device='0').providers())"
+```
+
+Expected: `['CUDAExecutionProvider', 'CPUExecutionProvider']`. If you see only
+`CPUExecutionProvider`, read [../docs/platform-notes.md](../docs/platform-notes.md) -
+a device-convention bug used to cause exactly that, at roughly 9x the cost per crop.
+
+### Verify OpenCV kept its GUI build
+
+`fast-alpr` pulls in `opencv-python-headless`, which shares the same `cv2/`
+directory as `opencv-python`. Whichever pip writes last wins, so `cv2.imshow`
+can break silently:
+
+```bash
+python -c "import cv2; cv2.namedWindow('t'); cv2.destroyAllWindows(); print('GUI OK')"
+```
+
+Fix if needed:
+
+```bash
+pip uninstall -y opencv-python-headless
+pip install --force-reinstall --no-deps opencv-python
+```
+
+## Model weights
+
+`yolo11x.pt` and `yolo11n.pt` download automatically on first use. **`best.pt`
+does not** - it is the purpose-trained suspicious-activity classifier and must be
+obtained from the project owner. All weights are git-ignored; see
+[../SETUP.md](../SETUP.md#external-assets-not-in-git).
+
+The first worker start can download model weights, so it takes longer than
+later starts.
 
 ## Start and monitor one ANPR worker
 
@@ -128,15 +187,24 @@ grant is required to start or stop the worker.
   the worker interpreter from `multi-object-tracking/.venv`.
 - **Catalogue unavailable:** confirm the authorised `SANDBOX_CATALOGUE_URL`
   in `backend/.env`, restart the backend, and re-run the registry sync.
-- **`MPS available: False`:** the worker will run on CPU and may not keep up
-  with a live feed. Do not compensate by opening multiple workers.
+- **`torch.cuda.is_available()` is `False`:** the worker will run on CPU and
+  will not keep up with a live feed. Reinstall torch from the cu128 index --
+  a plain `pip install torch` on Windows installs a CPU-only wheel silently.
+  Do not compensate by opening multiple workers.
+- **Plate ONNX reports only `CPUExecutionProvider`:** ANPR is running about 9x
+  slower than it should (~90ms/crop instead of ~10ms), which on short looping
+  clips also starves tracks of the frames they need to confirm a plate. See
+  [../docs/platform-notes.md](../docs/platform-notes.md).
 - **No sightings or alerts:** the worker may be healthy but have no confirmed
-  readable plate yet, or the stream may lack an authoritative time anchor.
-  Check its log and telemetry before treating this as a failure.
+  readable plate yet, or the stream may lack an authoritative time anchor. A
+  worker logging `confirmed but stream is not yet time-anchored; skipping
+  report` is refusing to invent a timestamp, which is correct behaviour -- the
+  fix is to give it an HLS source carrying program-date-time, not to relax the
+  check. Check its log and telemetry before treating this as a failure.
 - **Live tile says reconnecting:** the catalogue's `live` flag and a stored
   HLS URL are not proof of current browser playback. The Live view labels an
   active tile `connected` only after it buffers a media fragment; reconnecting
   means the relay is retrying a failed or expired stream session.
 
 For the event semantics, timestamp anchoring, and known limitations, see
-[`docs/model2-build-spec.md`](../docs/model2-build-spec.md).
+[`docs/anpr-pipeline-build-spec.md`](../docs/anpr-pipeline-build-spec.md).

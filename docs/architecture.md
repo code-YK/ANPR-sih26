@@ -1,8 +1,10 @@
 # Architecture
 
-Status: Accepted for Phase 1 by ADR 0001 and ADR 0002
+Status: Accepted by [ADR 0001](decisions/0001-integration-shape.md) and [ADR 0002](decisions/0002-implementation-stack.md)
 
-This architecture is optimised for a three-person Phase 1 team while preserving a credible evolution path to statewide deployment. It combines the mandatory Model 1 registry/GIS foundation with Model 2-style direct feed integration behind adapter contracts.
+Component-level detail for **SIH26127**. For the system in one document with diagrams, read [hld.md](hld.md) first; this file is the level below it.
+
+The shape is a **camera registry and GIS control plane** plus **direct feed integration** behind adapter contracts, optimised for a small team while preserving a credible evolution path to city-wide deployment.
 
 ## Principles
 
@@ -18,9 +20,9 @@ This architecture is optimised for a three-person Phase 1 team while preserving 
 
 ```mermaid
 flowchart LR
-    Dept[Department CCTV / VMS] -->|RTSP / ONVIF / SDK / API| Conn[Source connectors]
-    Cat[Sentinel catalogue] --> Conn
-    Private[Authorised private CCTV] -. optional .-> Conn
+    Dept[City CCTV / ANPR cameras] -->|RTSP / ONVIF / SDK / API| Conn[Source connectors]
+    Cat[Camera catalogue] --> Conn
+    Rec[Recorded government feeds<br/>government mode] -. demonstration .-> Conn
     Conn --> Media[Media workers]
     Media --> AI[ANPR and analytics]
     AI --> Events[Observation and event pipeline]
@@ -28,7 +30,7 @@ flowchart LR
     Events --> Match
     Match --> Alerts[Alerts and workflow]
     Registry[Camera registry + PostGIS] --> GIS[GIS and operator dashboard]
-    Events --> Journey[Vehicle journey service]
+    Events --> Journey[Trajectory service]
     Registry --> Journey
     Journey --> GIS
     Alerts --> GIS
@@ -41,18 +43,18 @@ flowchart LR
 
 Responsibilities:
 
-- mandatory Model 1 metadata;
+- camera node metadata for the whole city estate;
 - bulk/manual/API onboarding;
 - camera ownership, department, location, type, storage, and connectivity;
 - current health and maintenance status;
 - GIS layers, search, filters, exports, and gap reports;
 - access control and audit.
 
-Accepted Phase 1 implementation: PostgreSQL with PostGIS, a single FastAPI backend, and React Leaflet in the active frontend. The listed responsibilities include mandatory gaps that are not all implemented yet; current evidence is tracked in `docs/requirements.md`.
+Accepted implementation: PostgreSQL with PostGIS, a single FastAPI backend, and React Leaflet in the served console. Not every responsibility above is complete; current evidence is tracked per requirement in [requirements.md](requirements.md) under `SIH-PLAT-*`.
 
 ### 2. Catalogue and source connectors
 
-The connector boundary converts a source-specific catalogue/stream description into a canonical CameraSource. The first connector targets the Sentinel `/api/ingest` catalogue. Later connectors can target ONVIF, vendor SDKs, or federation middleware.
+The connector boundary converts a source-specific catalogue/stream description into a canonical CameraSource. The first connector targets an HTTP camera catalogue; later connectors can target ONVIF, vendor SDKs, or federation middleware. Government mode is itself a source: it repoints existing camera rows at a local relay serving recorded footage, and nothing downstream can tell the difference.
 
 Connector requirements:
 
@@ -85,11 +87,13 @@ Transport invariants:
 - PTS is monotonic within a stream epoch. Reconnects and loop discontinuities create an explicit new epoch when continuing prior tracker timing would be unsafe.
 - Each connected client receives its own stream copy, so capture ownership, concurrency, and bandwidth must be bounded.
 
-Workers must be independently restartable. Phase 1 runs them as subprocesses under the backend's process-local supervisor; no durable job queue is implemented. Prefer one owned capture per actively processed camera with internal fan-out to analytics where practical, rather than opening duplicate gateway connections. Statewide design partitions workers by region/source and scales horizontally.
+Workers must be independently restartable. The current deployment runs them as subprocesses under the backend's process-local supervisor; no durable job queue is implemented. Prefer one owned capture per actively processed camera with internal fan-out to analytics where practical, rather than opening duplicate gateway connections. A city-wide design partitions workers by zone/source and scales horizontally.
 
 ### 4. Analytics
 
-The mandatory path is ANPR. The output is an Observation, not an alert. This separation allows models to be replaced and reprocessed without changing watchlist logic.
+The primary path is ANPR (`SIH-OCR-*`). The output is an **Observation, not an alert**. That separation is what allows models to be replaced and results reprocessed without touching watchlist logic, and it is why all four expected components can read the same record without ever disagreeing about what a camera saw.
+
+Only a **confirmed** plate becomes an observation. Per-track voting settles the read first; intermediate OCR output is never published.
 
 An observation includes:
 
@@ -117,9 +121,9 @@ Observation -> MatchDecision -> Alert -> AlertAction/AuditEvent
 
 This preserves explainability and prevents a UI acknowledgement from altering the original analytic result.
 
-### 6. Vehicle journey
+### 6. Trajectory reconstruction (`SIH-TRAJ-*`)
 
-The first implementation reconstructs a journey from plate observations ordered by source time and enriched with registry coordinates. It should expose both map and tabular views.
+Expected component 2. Reconstructs a trajectory from plate observations ordered by **source time** and enriched with registry coordinates, exposing both map and tabular views plus four export formats built from one builder so they cannot disagree.
 
 Quality controls:
 
@@ -146,7 +150,7 @@ Minimum views:
 
 Every screen must show degraded/offline/unknown states rather than silently omitting failed data.
 
-## Implemented Phase 1 deployment
+## Implemented deployment
 
 ```mermaid
 flowchart TB
@@ -156,7 +160,7 @@ flowchart TB
     Supervisor[Process-local worker supervisor]
     Worker1[Media + ANPR worker]
     WorkerN[Additional analytics worker]
-    Sources[Sentinel camera grid]
+    Sources[City camera estate]
 
     Browser --> API
     API --> DB
@@ -175,12 +179,12 @@ Accepted stack; exact package sources are recorded in ADR 0002:
 - OpenCV and FFmpeg/ffprobe for capture and probing;
 - YOLO11, ByteTrack, fast-alpr, and ONNX Runtime for the current ANPR baseline;
 - PostgreSQL/PostGIS;
-- React/Vite with React Leaflet (two frontend variants: `frontend-v2` for the baseline, `frontend-v3` for the Buildathon-reskinned operator console with GSAP animations); and
-- process-local worker supervision for the current bounded demo.
+- React/Vite with React Leaflet (`frontend-v3` is the served console; `frontend-v2` is retained as reference); and
+- process-local worker supervision for the current bounded deployment.
 
-Redis/Kafka, Kubernetes, Docker Compose, and S3-compatible evidence storage are not implemented Phase 1 dependencies. They remain possible scale/deployment choices only after measurements and retention requirements justify them.
+Redis/Kafka, Kubernetes, Docker Compose, and S3-compatible evidence storage are **not** current dependencies. They remain possible scale choices only after measurements and retention requirements justify them.
 
-## Statewide evolution
+## City-wide evolution
 
 ```mermaid
 flowchart LR
@@ -213,7 +217,7 @@ Scale assumptions must be quantified in the HLD:
 
 ## Security and privacy boundaries
 
-- The Phase 1 identity and access decision is [ADR 0003](decisions/0003-department-rbac.md): `super_admin`, `department_admin`, and `department_user` roles plus per-department `viewer`/`operator` grants.
+- The identity and access decision is [ADR 0003](decisions/0003-department-rbac.md): `super_admin`, `department_admin`, and `department_user` roles plus per-department `viewer`/`operator` grants.
 - The API, not the React UI, enforces the boundary. Camera/media access, observations, alerts, analytics, journeys, reports, and survey frames are filtered or rejected before data is returned.
 - Human users authenticate with an opaque HttpOnly session cookie; only a token digest is stored. Worker ingestion uses a separate service token.
 - The home department is granted automatically. Only the super admin may add cross-department access; department admins govern employees in their own home department.
@@ -222,7 +226,7 @@ Scale assumptions must be quantified in the HLD:
 - TLS protects service and external connections where supported.
 - Camera/media networks are isolated from public/operator networks.
 - Department and purpose constrain access to streams, observations, watchlists, and alerts.
-- Implemented security and state-changing operations append audit events; successful authenticated metadata reads and denied authorisation are audited too. A database trigger rejects application-role audit-row updates/deletes, except the foreign-key actor-reference cleanup on account deletion. A super-admin-only canonical NDJSON archive provides a SHA-256-verifiable external hand-off, but storage in an approved immutable destination remains an explicit `GOV-NFR-003` gap, and a database superuser can still alter database controls.
+- Implemented security and state-changing operations append audit events; successful authenticated metadata reads and denied authorisation are audited too. A database trigger rejects application-role audit-row updates/deletes, except the foreign-key actor-reference cleanup on account deletion. A super-admin-only canonical NDJSON archive provides a SHA-256-verifiable external hand-off, but storage in an approved immutable destination remains an explicit `SIH-NFR-002` gap, and a database superuser can still alter database controls.
 - Development uses synthetic data or explicitly approved representative material only.
 - Evidence retention is selective, configurable, encrypted, and shorter than source video retention unless authorised.
 - Biometric or person-identification features require explicit legal/organiser approval and a documented privacy assessment.
@@ -241,11 +245,14 @@ Scale assumptions must be quantified in the HLD:
 | Duplicate observation | Preserve observation as policy allows; deduplicate alert creation idempotently. |
 | Dashboard unavailable | Processing continues; operators see service health after recovery. |
 
-## Deliberate non-goals for the first vertical slice
+## Deliberate non-goals
 
-- replacing departmental VMS products;
-- recording every stream centrally;
-- implementing live production government database integrations;
-- production-grade facial recognition;
+Stating these is part of the design, not an apology for it. Fuller reasoning in [hld.md](hld.md#7-what-this-design-deliberately-does-not-do).
+
+- **Per-camera speed or heading** - no camera is calibrated and some are PTZ, so only a corridor lower bound is honest;
+- **predictive congestion forecasting** - unfalsifiable against a plate-conditioned undercount;
+- **face recognition** - out of scope and legally gated; person search returns ranked appearance candidates, never an asserted identity;
+- **central video recording** - metadata-first by design, with bounded short-expiry evidence crops only;
+- replacing existing VMS products;
 - deploying Kubernetes locally; and
-- solving every analytics category before ANPR and journey evidence work.
+- solving every analytics category before OCR, trajectory, and alerting are evidenced.

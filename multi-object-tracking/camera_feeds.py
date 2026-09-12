@@ -155,7 +155,7 @@ class ProgramDateTimeAnchor:
     deltas. This does not require correlating individual frames to specific
     segments/parts - the achievable accuracy is bounded to roughly one segment
     duration plus however stale the anchor has drifted, which is an accepted,
-    documented limitation (see docs/model2-build-spec.md): it preserves
+    documented limitation (see docs/anpr-pipeline-build-spec.md): it preserves
     ordering and per-camera internal consistency, which is what route
     reconstruction needs, without claiming frame-perfect absolute time.
     """

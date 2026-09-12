@@ -1,10 +1,16 @@
-# Sentinel — Model 2 Vertical Slice: Build Notes
+# ANPR Pipeline Vertical Slice: Build Notes
+
+> **Historical build spec.** Written during an earlier programme whose
+> `Model N` vocabulary does not exist in SIH26127. Retained because it records
+> *why* this slice is built the way it is - the reasoning is still current even
+> where the naming is not. See [ADR 0004](decisions/0004-sih26127-rescope.md)
+> for the mapping, and [requirements.md](requirements.md) for current IDs.
 
 Status: Core implementation merged; requirement and evidence gaps remain (reviewed 2026-08-30)
 
 Covers the observation-ingestion → watchlist → alert path: live camera → ANPR
 detection/tracking → confirmed plate → `POST /api/sightings` → watchlist
-match → deduplicated alert. Builds directly on `docs/model1-build-spec.md`'s
+match → deduplicated alert. Builds directly on `docs/registry-gis-build-spec.md`'s
 registry (`cameras`, `sightings` tables) and reuses a teammate's existing
 `multi-object-tracking/` detection/tracking/ANPR code rather than
 reimplementing it.
@@ -44,7 +50,7 @@ format-repair work (see `multi-object-tracking/plates.py`'s own docstring).
 Reporting every intermediate read would let unvalidated OCR output reach the
 registry as if it were settled fact — the same honesty principle already
 applied to `anpr_viable`, `geocode_confidence`, and `metadata_confidence` in
-Model 1.
+the camera registry.
 
 ## 2. Timestamp anchoring (`seen_at` must never be `datetime.now()`)
 

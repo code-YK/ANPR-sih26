@@ -1,22 +1,28 @@
-# Model 2 Operator Console: UI Build Spec
+# Operator Console: UI Build Spec
+
+> **Historical build spec.** Written during an earlier programme whose
+> `Model N` vocabulary does not exist in SIH26127. Retained because it records
+> *why* this slice is built the way it is - the reasoning is still current even
+> where the naming is not. See [ADR 0004](decisions/0004-sih26127-rescope.md)
+> for the mapping, and [requirements.md](requirements.md) for current IDs.
 
 Status: implemented and merged. This records what was built and why, not a
 forward-looking plan — see `PROJECT_STATE.md` for current status and
-`docs/model2-build-spec.md` for the backend vertical slice this UI sits on.
+`docs/anpr-pipeline-build-spec.md` for the backend vertical slice this UI sits on.
 
 ## Stack
 
 React 19 + Vite, `react-router-dom` v7, `react-leaflet` v5, `hls.js` v1.7.
 No TypeScript, Tailwind, Redux, or SSR — the spec's original React 18 target
 moved to 19 because Vite's current template and react-leaflet 5/react-router
-7 pull it in with no conflicts. Lives at `frontend-v2/`; the vanilla Model 1
+7 pull it in with no conflicts. Lives at `frontend-v2/`; the vanilla
 UI (`frontend/`) remains as migration reference only. It is no longer served because it has no authentication flow; `frontend-v2/` is the only application shell.
 
 ## Routes
 
 `/live` (default), `/alerts`, `/journey` and `/journey/:plate`, `/watchlist`,
 `/registry/*` (nested: camera list, GIS map, gap analysis — the ported
-Model 1 UI).
+original UI).
 
 ## Backend prerequisites this UI depends on
 
@@ -24,7 +30,7 @@ Model 1 UI).
 - `AlertOut` enriched with joined `plate`, `camera_name`, `location_text`,
   `department`, `reason_code`, `severity` (see `backend/app/routers/alerts.py`)
 - `cameras.analytics_enabled` column + auto-start supervisor (§2.4 of
-  `docs/model2-build-spec.md`) — the Live view's ANPR toggle sets this column
+  `docs/anpr-pipeline-build-spec.md`) — the Live view's ANPR toggle sets this column
   and requests an immediate start; the supervisor reconciles that intent in
   the current session, while backend startup clears stale persisted intent
 - `backend/app/routers/hls_proxy.py` — see below

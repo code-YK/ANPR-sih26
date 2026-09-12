@@ -7,6 +7,15 @@
 # cu128 or newer is required for RTX 50-series (Blackwell, sm_120).
 # Verify with:  python -c "import torch; print(torch.cuda.is_available())"
 
+# Target interpreter: Python 3.11, matching backend/requirements.txt.
+#
+# NOTE (verified 2026-09-12): these lower bounds are a working baseline, not a
+# reproducible lock -- see ADR 0002. On a fresh install today they resolve to
+# ultralytics 8.4.149 and **opencv-python 5.0.0.93**, a major-version jump from
+# the 4.x this range was written against. Everything imports and cv2.imshow
+# works, but no worker has been run end to end against OpenCV 5 for long.
+# If you hit an unexplained cv2 behaviour change, check this first.
+
 ultralytics>=8.4.63
 opencv-python>=4.8.0
 numpy>=1.24.0

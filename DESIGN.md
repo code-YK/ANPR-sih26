@@ -29,7 +29,7 @@ button padding, and native HTML elements in place of JS widgets. §14 records
 the one place this document knowingly departs from it, and why.
 
 Related: [`docs/architecture.md`](docs/architecture.md),
-[`docs/model2-ui-build-spec.md`](docs/model2-ui-build-spec.md),
+[`docs/operator-console-build-spec.md`](docs/operator-console-build-spec.md),
 [ADR 0003](docs/decisions/0003-department-rbac.md),
 [`docs/requirements.md`](docs/requirements.md).
 
@@ -55,7 +55,7 @@ the registry carries `metadata_confidence` so that "an inference must never
 render as if it were a confirmed fact"
 ([`Badge.jsx`](frontend-v2/src/components/Badge.jsx)); the HLS player reports
 its own reconnect count because "presenting it as one unbroken feed would
-misrepresent it" ([`docs/model2-ui-build-spec.md`](docs/model2-ui-build-spec.md));
+misrepresent it" ([`docs/operator-console-build-spec.md`](docs/operator-console-build-spec.md));
 the journey endpoint returns `restricted_stops` and `unplaced_stops` rather
 than silently dropping either.
 
@@ -67,7 +67,7 @@ of the system's knowledge as legible as its knowledge.**
 *(The state of `main` before this direction was implemented. Retained because
 the amber collision below is the reason the certainty grammar exists.)*
 
-The look was ported like-for-like from the vanilla Model 1 UI and had
+The look was ported like-for-like from the original vanilla UI and had
 no point of view: a `#f5f6f8` ground, a default `#1c5cb8` blue, the system font
 stack, 6–8px radii, and pastel pill badges. It read as generic administrative
 CRUD. Under `GOV-SUB-003` the judged artifact is a screen recording of the real

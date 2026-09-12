@@ -39,4 +39,4 @@ The team should assign a security owner and private reporting channel before any
 
 ## Scope claims
 
-Do not claim production security, privacy compliance, government-database integration, or biometric legality without evidence and explicit authorisation. The HLD must clearly distinguish Phase 1 controls, tested controls, and proposed production controls.
+Do not claim production security, privacy compliance, government-database integration, or biometric legality without evidence and explicit authorisation. The HLD must clearly distinguish current controls, tested controls, and proposed production controls.

@@ -5,31 +5,33 @@
 Build one reliable end-to-end path before dividing the system into many services:
 
 ```text
-catalogue-discovered camera
+registered camera node
   -> resilient RTSP/TCP capture
   -> ANPR observation with source PTS
   -> normalised plate
   -> watchlist match
   -> deduplicated alert
   -> stored event
-  -> GIS marker and vehicle journey
+  -> GIS marker and vehicle trajectory
 ```
 
-This path directly demonstrates the most heavily repeated mandatory requirements and gives every later feature a real integration point.
+This path directly demonstrates the core of what SIH26127 asks for and gives every later feature a real integration point.
 
 ## Recommended architecture choice
 
-Use the mandatory Model 1 registry and GIS foundation plus a Model 2-style direct integration for the Phase 1 sandbox. Put every source behind a connector interface so the code can evolve toward Model 3 federation without rewriting analytics and UI components.
+Build the camera registry and GIS foundation first, then integrate directly with camera sources. Put every source behind a connector interface so the code can later evolve toward federation middleware without rewriting analytics or UI components.
 
-Why this fits a three-person hackathon team:
+The registry comes first for a concrete reason, not tidiness: trajectory reconstruction plots stops on a map and traffic analytics aggregates per node. Both are impossible without authoritative camera geometry.
 
-- Model 2 is the shortest path to the organiser's direct RTSP/HTTP sandbox endpoints.
-- Model 1 creates the official registry/GIS deliverables and the location data required for route reconstruction.
+Why this fits a small hackathon team:
+
+- direct-integration is the shortest path to the organiser's direct RTSP/HTTP sandbox endpoints.
+- registry/GIS creates the official registry/GIS deliverables and the location data required for route reconstruction.
 - An adapter boundary preserves the vendor-neutral story without requiring a full federation product during Phase 1.
-- Metadata-first upstream flow makes the 80,000-camera scale narrative credible: analyse regionally/at the edge and centralise observations, alerts, health, and selectively requested evidence.
-- A full central VMS, statewide recording system, and production database integrations are too broad to build safely in the available window; they belong in the HLD and roadmap unless the team already owns mature components.
+- Metadata-first upstream flow is what makes the city-wide scale narrative credible: analyse at the zone edge and centralise only observations, alerts, health, and selectively requested evidence. A plate read is a few hundred bytes; a video stream is megabits per second.
+- A full central VMS, a city-wide recording system, and production database integrations are too broad to build safely in the available window; they belong in the HLD and roadmap unless the team already owns mature components.
 
-This Phase 1 direction is accepted in [ADR 0001](decisions/0001-proposed-integration-shape.md). The concrete implementation stack is accepted in [ADR 0002](decisions/0002-phase-1-implementation-stack.md).
+This direction is accepted in [ADR 0001](decisions/0001-integration-shape.md). The concrete implementation stack is accepted in [ADR 0002](decisions/0002-implementation-stack.md).
 
 ## Delivery sequence
 
@@ -97,7 +99,7 @@ Do not postpone the HLD, scale calculations, cost model, or output-report format
 
 ### Must build
 
-- Model 1 registry/GIS essentials;
+- registry/GIS registry/GIS essentials;
 - catalogue-driven ingestion;
 - resilient live-simulated feed handling;
 - ANPR observation path;
@@ -112,7 +114,7 @@ Do not postpone the HLD, scale calculations, cost model, or output-report format
 - real VAHAN/SARTHI/eGujCop/AFIS/NAFIS adapters;
 - private CCTV onboarding governance;
 - full regional/edge topology;
-- statewide storage and disaster recovery;
+- city-wide storage and disaster recovery;
 - complete department-specific connector estate; and
 - production facial recognition or biometric matching.
 

@@ -1,41 +1,66 @@
-# Sentinel operator console
+# Operator console (frontend-v3)
 
-This is the active React operator console for the Sentinel Phase 1 application. It provides the registry/GIS, live viewer, watchlist, alerts, vehicle journey, and analytics controls backed by the unversioned FastAPI `/api` surface.
+**This is the served operator console** for SIH26127. FastAPI mounts its production build at `/`. It provides the registry and GIS map, the live video wall, watchlist, alerts, vehicle trajectory search, offline forensic search (Investigate), and the analytics controls, all backed by the FastAPI `/api` surface.
 
-Its existence does not mean Module 1 is complete. Camera-type/health GIS controls, health/maintenance history, registry search/export, and read/denial audit coverage are implemented; authenticated browser GIS evidence is recorded, and the project owner confirms official catalogue sync is operational. A redacted official demonstration recording/output report, a provisioned WORM/object-lock audit-retention destination, and the remaining ledger evidence stay open in `docs/requirements.md`.
+It is a strict superset of `frontend-v2`: every view, context and hook that console has, plus a loading screen and GSAP reveal animations.
 
-The console's visual and interaction direction is documented in [`/DESIGN.md`](../DESIGN.md): an HSL token system, self-hosted Instrument Sans + IBM Plex Mono type, and a certainty grammar (texture for how a fact is known, colour reserved for urgency) applied consistently across the video wall, tables, map, and journey timeline. All six adoption steps are merged on `main`; `DESIGN.md` §13 lists their implementation commits, the later integration fixes, and four details that remain incomplete or only partially implemented because the current API/UI boundary does not expose the required data.
+## Directory map
+
+| Path | Contents |
+|---|---|
+| `src/views/Live/` | Video wall, focused player, per-camera analytics toggles, detector view |
+| `src/views/Registry/` | Camera list, GIS map, gap analysis, health and maintenance history, create/edit modals |
+| `src/views/Journey/` | **Trajectory reconstruction** — plate search, chronological timeline, numbered route map |
+| `src/views/Alerts/` | Alert queue with acknowledge/resolve |
+| `src/views/Watchlist/` | Blacklist CRUD and bulk import |
+| `src/views/Investigate/` | Recording upload, ingest runs, plate and person search, bbox overlay player |
+| `src/views/Admin/` | Access administration, catalogue sources, **demo and government mode toggles** |
+| `src/views/Auth/` | Sign-in and registration request |
+| `src/context/` | Auth, cameras, alerts, departments — shared state |
+| `src/hooks/` | HLS and WebRTC players, polling, visibility, GSAP reveals |
+| `src/components/` | Map tiles, status marks, modals, toasts, lightbox, log panel |
 
 ## Prerequisites
 
-- Node.js `^20.19.0` or `>=22.12.0` (required by Vite 8)
-- npm (the exact dependency graph is locked in `package-lock.json`)
-- the backend running at `http://127.0.0.1:8000`
+- Node.js `^20.19.0` or `>=22.12.0` (required by Vite 8). Verified on 24.19.0
+- npm — the exact dependency graph is locked in `package-lock.json`
+- The backend running at `http://127.0.0.1:8000`
 
 ## Development
 
 ```bash
-# from the repository root
-cd frontend-v2
-npm ci
-npm run dev
+npm --prefix frontend-v3 ci
+npm --prefix frontend-v3 run dev
 ```
 
-Open the URL printed by Vite. Development API requests are proxied to the local backend by `vite.config.js`.
+Opens on **http://localhost:5174**. API requests are proxied to the local backend by `vite.config.js`.
+
+### Why the port is fixed
+
+`vite.config.js` sets `port: 5174` with `strictPort: true`. This is deliberate, not a preference. `hlsProxyUrl` and `recordingMediaUrl` in `src/api.js` fetch video **cross-origin from the backend even in development**, so this origin has to be a known, stable entry in the backend's CORS allowlist (`backend/app/main.py`). If Vite were allowed to auto-increment to the next free port — which it would do whenever `frontend-v2`'s dev server on 5173 was already running — every video fetch would fail with an opaque CORS error.
 
 ## Verification and production build
 
 ```bash
-cd frontend-v2
-npm ci
-npm run lint
-npm run build
+npm --prefix frontend-v3 ci
+npm --prefix frontend-v3 run lint
+npm --prefix frontend-v3 run build
 ```
 
-The production build is written to `frontend-v2/dist/`. Start the FastAPI backend afterward and open `http://127.0.0.1:8000/`; the backend serves that authenticated application at `/`.
+The build is written to `frontend-v3/dist/`. Start the backend afterwards and open <http://127.0.0.1:8000/>.
 
-Lint and build only prove that the console compiles. They do not prove live-feed availability, browser compatibility, accessibility, or any complete Module 1 checkpoint. The API-level role workflow is covered by `backend/scripts/rbac_smoke_test.py`; record separate redacted browser evidence for UI claims.
+Lint and build only prove the console compiles. They do not prove live-feed availability, browser compatibility, or accessibility. Record separate browser evidence for any UI claim.
 
 ## Security boundary
 
-The console requires an approved account. UI controls reflect the role/clearance model, but the backend remains the enforcement point. Camera responses expose only capability flags (`stream_available`, `analytics_stream_available`, and `webrtc_preview_available`), and video is fetched through authenticated, department-checked HLS or WHEP relays; raw endpoints stay server-side. The Phase 1 password/session mechanism is for a trusted local demo, not production SSO. Do not place credentials, endpoint values, observed vehicle identifiers, screenshots of government data, or footage in fixtures or committed evidence.
+The console requires an approved account. UI controls reflect the role and clearance model, **but the backend is the enforcement point** — never rely on a hidden control for access control.
+
+Camera responses expose only capability flags (`stream_available`, `analytics_stream_available`, `webrtc_preview_available`). Video is fetched through authenticated, department-checked HLS or WHEP relays; raw camera endpoints never reach the browser.
+
+The current password/session mechanism is for a trusted demo, not production SSO. Do not place credentials, endpoint values, observed vehicle identifiers, screenshots of government data, or footage into fixtures or committed evidence.
+
+## Design system
+
+The visual and interaction direction is documented in [`/DESIGN.md`](../DESIGN.md): an HSL token system, self-hosted Instrument Sans + IBM Plex Mono, and a **certainty grammar** — texture encodes how a fact is known, colour is reserved for urgency — applied consistently across the video wall, tables, map, and trajectory timeline.
+
+One consequence worth knowing when editing: thumbnails in the Investigate results grid use `object-fit: contain`, not `cover`. A track crop is already cut tight to its detection box, so `cover` would crop it a second time and a tall subject would lose its head and wheels.
