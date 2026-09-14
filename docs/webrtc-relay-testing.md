@@ -22,10 +22,10 @@ does not start or stop when focus changes.
 A local `mediamtx` binary is required (not bundled, not a Python
 dependency):
 
-```bash
-brew install mediamtx     # macOS; see https://mediamtx.org for other platforms
-which mediamtx             # confirm it's on PATH -- the backend spawns it by name
-```
+Download from [github.com/bluenviron/mediamtx/releases](https://github.com/bluenviron/mediamtx/releases)
+and set `MEDIAMTX_BIN` in `backend/.env` to point at it — see
+[SETUP.md](../SETUP.md) step 5 for the Windows/Linux download and path
+details. The backend does not assume it is on `PATH`.
 
 If it's missing, the backend logs a warning at startup and continues without
 it. Cameras with HLS still fall back to HLS; an RTSP-only camera has no browser

@@ -21,9 +21,33 @@ There are three independently runnable components:
 | **Python** | **3.11** | Both virtualenvs. Not 3.12+ — see *Why 3.11* below |
 | PostgreSQL + PostGIS | 16 or newer | Or use the team's hosted database (see step 2) |
 | Node.js | `^20.19` or `>=22.12` | Required by Vite 8. Verified on 24.19.0 |
-| FFmpeg / ffprobe | any recent | Must be on `PATH` |
+| FFmpeg / ffprobe | any recent | **Required, global install, on `PATH`** — see *FFmpeg* below |
 | NVIDIA GPU + CUDA | 12.8+ | Analytics only. **Required** for RTX 50-series (Blackwell, sm_120) |
 | MediaMTX | any recent | Needed for live preview and government/demo modes |
+
+### FFmpeg
+
+Not optional and not something `pip install` can provide — it is a native
+binary, not a Python package, so it is unrelated to either `.venv` and must
+be installed once at the OS level, the same tier as installing Python or
+Node itself. Four things call it directly and have no fallback if it is
+missing: camera onboarding (probing + survey stills), Investigate upload
+normalisation, and the WebRTC/WHEP live preview.
+
+It must be on `PATH` — unlike MediaMTX below, there is no `FFMPEG_BIN`
+setting to point at a custom location. If it's missing or not on `PATH`,
+every one of those features fails the same way MediaMTX does when
+misconfigured: `FileNotFoundError: [WinError 2] The system cannot find the
+file specified` (Linux: `FileNotFoundError: [Errno 2] No such file or
+directory`).
+
+- **Windows:** `winget install Gyan.FFmpeg`, then open a **new** terminal
+  (PATH only updates for new shells) and confirm with `ffmpeg -version`. No
+  winget: download the "full" build from
+  [gyan.dev/ffmpeg/builds](https://www.gyan.dev/ffmpeg/builds/), unzip
+  anywhere, and add its `bin/` folder to your user `PATH` manually.
+- **Linux:** `sudo apt install ffmpeg` (Debian/Ubuntu) puts both `ffmpeg`
+  and `ffprobe` on `PATH` directly.
 
 ### Why 3.11
 
@@ -124,10 +148,14 @@ An additional safe synthetic dataset is available via `scripts/seed_synthetic_de
 
 Needed for the WebRTC/WHEP preview and for both demo and government modes. **It is not vendored** — the Windows `.exe` is useless on Linux and vice versa.
 
-- **Windows:** download the `windows_amd64` build from the MediaMTX releases page, unzip to `tools/mediamtx/`, then set `MEDIAMTX_BIN=E:\path\to\repo\tools\mediamtx\mediamtx.exe`.
-- **Linux:** download the `linux_amd64` build, extract to `tools/mediamtx/`, then set `MEDIAMTX_BIN=/path/to/repo/tools/mediamtx/mediamtx`.
+Download: **[github.com/bluenviron/mediamtx/releases](https://github.com/bluenviron/mediamtx/releases)** — latest release, the platform-specific `.zip`/`.tar.gz` (not the Docker image).
+
+- **Windows:** download `mediamtx_*_windows_amd64.zip`, unzip to `tools/mediamtx/` (so `tools/mediamtx/mediamtx.exe` exists), then set `MEDIAMTX_BIN=E:\path\to\repo\tools\mediamtx\mediamtx.exe` in `backend/.env`.
+- **Linux:** download `mediamtx_*_linux_amd64.tar.gz`, extract to `tools/mediamtx/` (so `tools/mediamtx/mediamtx` exists), `chmod +x` it, then set `MEDIAMTX_BIN=/path/to/repo/tools/mediamtx/mediamtx` in `backend/.env`.
 
 Its absence is non-fatal for the preview — the backend logs a warning and every camera stays viewable over HLS — but government and demo modes will refuse to start without it.
+
+**Having the file is not enough — `MEDIAMTX_BIN` must also be set.** The setting defaults to the bare word `mediamtx`, which only works if it is on your system `PATH`; `tools/` is gitignored (each machine's binary stays local, see step 6), so a fresh clone has the folder but not the env var. The symptom is `FileNotFoundError: [WinError 2] The system cannot find the file specified` when toggling demo/government mode, even with `mediamtx.exe` sitting right there in `tools/mediamtx/` — it means `backend/.env` is missing (or has a wrong/relative) `MEDIAMTX_BIN` line. Fix: add the absolute path as above, using this machine's own drive letter and repo path, then restart the backend.
 
 Three MediaMTX instances can run side by side on deliberately distinct ports:
 
