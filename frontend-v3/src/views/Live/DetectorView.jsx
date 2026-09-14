@@ -79,7 +79,7 @@ export default function DetectorView({ cameraId, mode, restartKey = 0 }) {
         <div><dt>peak</dt><dd>{telemetry.peak_tracked}</dd></div>
         <div><dt>fps</dt><dd>{telemetry.fps ?? "—"}</dd></div>
         <div><dt>last detection</dt><dd>{lastSeen}</dd></div>
-        {mode === "vehicle" && (
+        {(mode === "vehicle" || mode === "vehicle_finetuned") && (
           <div><dt>plates reported</dt><dd>{telemetry.plates_reported ?? 0}</dd></div>
         )}
         {telemetry.queue_capacity != null && (
@@ -144,7 +144,7 @@ export default function DetectorView({ cameraId, mode, restartKey = 0 }) {
           frame now — see the Alerts view for the raised alert.
         </p>
       )}
-      {mode === "vehicle" && telemetry.plates_reported === 0 && telemetry.unique_tracks > 0 && (
+      {(mode === "vehicle" || mode === "vehicle_finetuned") && telemetry.plates_reported === 0 && telemetry.unique_tracks > 0 && (
         <p className="hint">
           Vehicles are being detected and tracked, but no plate has met the confirmation
           bar on this camera. That is the expected result where the survey marked the

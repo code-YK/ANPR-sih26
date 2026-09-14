@@ -1,5 +1,7 @@
 """Start/stop/status control for the analytics workers (ANPR "vehicle" mode,
-and "person" mode for counting), plus the auto-start supervisor.
+"vehicle_finetuned" for the fine-tuned veh5 checkpoint under evaluation, and
+"person"/"suspicious" for their own bonus analytics), plus the auto-start
+supervisor.
 
 Workers live in multi-object-tracking/ (torch/ultralytics/fast-alpr -- heavy
 ML deps this backend deliberately does not carry) and are launched as
@@ -9,15 +11,21 @@ of already-running workers, an accepted limitation for this build -- there is
 no message queue or process supervisor here, per the build spec's "no
 microservices, no orchestration" constraint. GOV-ING-012 pacing is enforced
 by independent per-mode caps (MAX_CONCURRENT_VEHICLE_WORKERS,
-MAX_CONCURRENT_PERSON_WORKERS) rather than by a scheduler. The vehicle cap
-is a bounded deployment setting (the local demo profile is three); reduce or
-raise it only from measured GPU, decoder, and gateway headroom.
+MAX_CONCURRENT_VEHICLE_FINETUNED_WORKERS, MAX_CONCURRENT_PERSON_WORKERS)
+rather than by a scheduler. The vehicle cap is a bounded deployment setting
+(the local demo profile is three); reduce or raise it only from measured
+GPU, decoder, and gateway headroom. The finetuned cap defaults to 1 --
+deliberately low, see _reconcile_mode and finetune/decision.md D7.
 
 Auto-start (build spec §2.4): every camera with `analytics_enabled=true` is
-scheduled for a "vehicle" (ANPR) worker on the periodic supervisor tick, up
-to the concurrency cap, ANPR-viable cameras first. Focus is a viewing choice,
-not an analytics lifecycle operation. The UI only toggles the column; this
-module spawns/stops the process. Because worker state is in-memory, a backend
+scheduled for a "vehicle" (ANPR) worker, and every camera with
+`analytics_finetuned_enabled=true` for a "vehicle_finetuned" one, both on the
+periodic supervisor tick, up to each mode's own concurrency cap, ANPR-viable
+cameras first. The two flags are mutually exclusive per camera (see
+cameras.py's _apply_operator_update), so this is two independent reconciles,
+never a conflict over the same camera. Focus is a viewing choice, not an
+analytics lifecycle operation. The UI only toggles the column; this module
+spawns/stops the process. Because worker state is in-memory, a backend
 restart doesn't know what was running before -- it writes a small manifest
 (camera_id, mode, pid) on every start/stop specifically so that on the next
 startup it can find and kill any orphaned worker processes left over from the
@@ -94,9 +102,14 @@ _MANIFEST_PATH = _LOG_DIR / "workers_manifest.json"
 # still targets the PID directly and is unaffected.
 _DETACHED = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {}
 
-_MODES = ("vehicle", "person", "suspicious")
+_MODES = ("vehicle", "vehicle_finetuned", "person", "suspicious")
 _WORKER_SCRIPTS = {
     "vehicle": _WORKER_DIR / "observation_worker.py",
+    # Same worker script as "vehicle" -- observation_worker.py derives its
+    # class id -> name mapping from whichever --model checkpoint is loaded
+    # (see its build_vehicle_maps docstring), so only the --model argument
+    # differs between these two modes. No separate script needed.
+    "vehicle_finetuned": _WORKER_DIR / "observation_worker.py",
     "person": _WORKER_DIR / "person_observation_worker.py",
     "suspicious": _WORKER_DIR / "suspicious_observation_worker.py",
 }
@@ -109,13 +122,22 @@ _WORKER_SCRIPTS = {
 # secondary identity and counting is more sensitive to ID switches.
 _TRACKER_CONFIG = {
     "vehicle": "trackers/fast.yaml",
+    # Same detection task as "vehicle", so the same tuned tracker applies.
+    "vehicle_finetuned": "trackers/fast.yaml",
     "person": "trackers/recommended.yaml",
     # People-tracking, same ReID-on config as person mode: counting and
     # per-person alerting are both sensitive to ID switches.
     "suspicious": "trackers/recommended.yaml",
 }
+# The fine-tuned veh5 checkpoint (adds auto_rickshaw; see
+# multi-object-tracking/finetune/v11x_fintune_comparison.md). Relative to
+# _WORKER_DIR, matching how the worker resolves --model. Kept as one named
+# constant rather than inlined so there is exactly one place to update if a
+# later fine-tuning round produces a new checkpoint.
+_FINETUNED_VEHICLE_MODEL = "finetune/weights/yolo11x-veh5-960-20260913-232921_best.pt"
 _DEFAULT_MODEL = {
     "vehicle": "yolo11x.pt",
+    "vehicle_finetuned": _FINETUNED_VEHICLE_MODEL,
     "person": "yolo11n.pt",
     # The purpose-trained two-class detector (normal vs potentially dangerous
     # person). Lives next to the worker; the worker's cwd is _WORKER_DIR.
@@ -155,6 +177,13 @@ _STREAM_IDLE_TIMEOUT_SECONDS = 30.0
 # concurrency cap -- which the UI must be able to show, because "waiting for a
 # free slot" and "broken" look identical otherwise.
 _desired_vehicle: list[str] = []
+# Same idea, for "vehicle_finetuned". A camera is never in both lists at once
+# (analytics_enabled/analytics_finetuned_enabled are mutually exclusive per
+# camera -- see cameras.py's _apply_operator_update), so the two budgets
+# never compete for the same camera; kept as separate lists rather than one
+# tagged list so each mode's queued-entry/status logic stays as simple as
+# the original single-mode version.
+_desired_vehicle_finetuned: list[str] = []
 
 # Restart backoff per (camera_id, mode). A worker that dies almost as soon as
 # it starts -- which is what happens during a gateway outage, when it can't
@@ -342,10 +371,17 @@ async def clear_persisted_intent() -> None:
         result = await session.execute(
             update(Camera).where(Camera.analytics_enabled.is_(True)).values(analytics_enabled=False)
         )
+        finetuned_result = await session.execute(
+            update(Camera).where(Camera.analytics_finetuned_enabled.is_(True))
+            .values(analytics_finetuned_enabled=False)
+        )
         await session.commit()
         if result.rowcount:
             logger.info("Cleared analytics_enabled on %d camera(s) at startup; "
                         "ANPR starts only when an operator enables it", result.rowcount)
+        if finetuned_result.rowcount:
+            logger.info("Cleared analytics_finetuned_enabled on %d camera(s) at startup; "
+                        "same reasoning as analytics_enabled above", finetuned_result.rowcount)
 
 
 async def _start_worker(camera_id: str, mode: str, model: str, session: AsyncSession) -> dict:
@@ -373,6 +409,7 @@ async def _start_worker(camera_id: str, mode: str, model: str, session: AsyncSes
     settings = get_settings()
     limit = {
         "vehicle": settings.max_concurrent_vehicle_workers,
+        "vehicle_finetuned": settings.max_concurrent_vehicle_finetuned_workers,
         "person": settings.max_concurrent_person_workers,
         "suspicious": settings.max_concurrent_suspicious_workers,
     }[mode]
@@ -404,11 +441,19 @@ async def _start_worker(camera_id: str, mode: str, model: str, session: AsyncSes
     # custom stream run analytics instead of failing back to that catalogue.
     source_url, source_transport = _analytics_source(camera)
     worker_args += ["--url", source_url]
-    if mode == "vehicle":
+    if mode in ("vehicle", "vehicle_finetuned"):
         # Absolute, not relative: the worker's cwd is _WORKER_DIR
         # (multi-object-tracking/), not this process's -- a relative
         # evidence_dir would silently land in the wrong folder.
         worker_args += ["--evidence-dir", str(Path(settings.evidence_dir).resolve())]
+        # observation_worker.py's telemetry stem defaults to "vehicle" --
+        # only "vehicle_finetuned" needs to say so explicitly, but passing it
+        # for both is one code path instead of two and is harmless (matches
+        # the default). Without this, a finetuned worker would publish under
+        # the same "camera-<id>-vehicle" telemetry files as a baseline one,
+        # and analytics_telemetry()/analytics_stream() below (which build the
+        # path from `mode`) would look in the wrong place for it.
+        worker_args += ["--telemetry-mode", mode]
 
     worker_env = os.environ.copy()
     worker_env.setdefault("SANDBOX_CATALOGUE_URL", settings.sandbox_catalogue_url)
@@ -519,24 +564,37 @@ async def stop_analytics(
     return status
 
 
-def _queued_entry(camera_id: str) -> dict | None:
+def _desired_list(mode: str) -> list[str]:
+    """Looked up by name at call time, not captured once -- supervisor_tick
+    rebinds `_desired_vehicle`/`_desired_vehicle_finetuned` to a brand-new
+    list every tick (global reassignment, not in-place mutation), so a dict
+    built once at import time would hold a permanently-stale reference."""
+    return _desired_vehicle if mode == "vehicle" else _desired_vehicle_finetuned
+
+
+def _queued_entry(camera_id: str, mode: str = "vehicle") -> dict | None:
     """A synthetic status row for a camera that's enabled but hasn't been
     given a worker slot yet -- without it, "queued" and "silently, repeatedly
     failing to start" both just look like "not running" to a caller. Shared
     by both status endpoints below so a bulk poll gets the exact same
     queued/failure picture a per-camera poll would, in one round trip
-    instead of one-per-camera."""
-    if camera_id not in _desired_vehicle or (camera_id, "vehicle") in _workers:
+    instead of one-per-camera.
+
+    `mode` is "vehicle" or "vehicle_finetuned" -- the only two modes with a
+    persistent, supervisor-managed desired-set; person/suspicious are manual
+    start/stop and never queue."""
+    desired = _desired_list(mode)
+    if camera_id not in desired or (camera_id, mode) in _workers:
         return None
     ahead = [
-        cid for cid in _desired_vehicle
-        if (cid, "vehicle") not in _workers and _desired_vehicle.index(cid) < _desired_vehicle.index(camera_id)
+        cid for cid in desired
+        if (cid, mode) not in _workers and desired.index(cid) < desired.index(camera_id)
     ]
-    key = (camera_id, "vehicle")
+    key = (camera_id, mode)
     retry_after = _retry_after.get(key)
     return {
         "camera_id": camera_id,
-        "mode": "vehicle",
+        "mode": mode,
         "pid": None,
         "model": None,
         "started_at": None,
@@ -561,6 +619,7 @@ async def analytics_capacity(_auth: AuthContext = Depends(get_current_auth)):
     settings = get_settings()
     return {
         "vehicle": settings.max_concurrent_vehicle_workers,
+        "vehicle_finetuned": settings.max_concurrent_vehicle_finetuned_workers,
         "person": settings.max_concurrent_person_workers,
         "suspicious": settings.max_concurrent_suspicious_workers,
     }
@@ -576,7 +635,10 @@ async def analytics_status(
     just to render a capacity summary."""
     _reap_finished()
     entries = [_handle_status(handle) for handle in _workers.values()]
-    entries += [e for e in (_queued_entry(cid) for cid in _desired_vehicle) if e is not None]
+    entries += [e for e in (_queued_entry(cid, "vehicle") for cid in _desired_vehicle) if e is not None]
+    entries += [
+        e for e in (_queued_entry(cid, "vehicle_finetuned") for cid in _desired_vehicle_finetuned) if e is not None
+    ]
 
     allowed = authorised_departments(auth)
     if allowed is None:
@@ -605,9 +667,10 @@ async def analytics_status_one(
     await get_authorised_camera(session, auth, camera_id, "viewer")
     _reap_finished()
     out = [_handle_status(h) for (cid, _mode), h in _workers.items() if cid == camera_id]
-    queued = _queued_entry(camera_id)
-    if queued is not None:
-        out.append(queued)
+    for mode in ("vehicle", "vehicle_finetuned"):
+        queued = _queued_entry(camera_id, mode)
+        if queued is not None:
+            out.append(queued)
     return out
 
 
@@ -800,67 +863,87 @@ async def list_analytics_counts(
 # Auto-start supervisor (build spec §2.4)
 # --------------------------------------------------------------------------
 
-async def supervisor_tick() -> None:
-    """Reconcile running "vehicle" (ANPR) workers against what the operator
-    asked for via `cameras.analytics_enabled`.
+async def _reconcile_mode(mode: str, enabled_column, budget: int, session: AsyncSession) -> list[str]:
+    """Shared by "vehicle" (analytics_enabled) and "vehicle_finetuned"
+    (analytics_finetuned_enabled): decide the desired camera set for one
+    vehicle-family mode, stop workers no longer wanted, start what's wanted
+    and isn't running. Returns the ordered desired-camera-id list so the
+    caller can publish it to the module-level `_desired_*` global.
 
-    This is a full reconcile, not start-only. An earlier version only ever
-    started workers, which produced two silent failures: turning ANPR *off*
-    left the worker running forever (holding a slot it no longer deserved),
-    and an ANPR-viable camera enabled later could never start because
-    already-running non-viable cameras held every slot -- the priority
-    ordering only applied at cold start, so it starved. Deciding the desired
-    set first and then reconciling both directions fixes both.
+    This is a full reconcile, not start-only, for the same reason the
+    original single-mode version was: turning ANPR *off* must free the
+    worker rather than leave it running forever, and a higher-priority
+    camera enabled later must be able to displace a lower-priority one
+    already holding a slot -- priority only applying at cold start was the
+    original bug this shape fixes.
 
-    "person" mode is never touched here: it stays manual (bonus analytics,
-    GOV-FUN-013) rather than being part of the continuous-ANPR requirement
-    this exists to satisfy. It also has its own independent concurrency
-    budget (max_concurrent_person_workers), so it no longer competes with
-    the vehicle budget below.
+    The two modes never compete for the same camera: analytics_enabled and
+    analytics_finetuned_enabled are mutually exclusive per camera (enforced
+    in cameras.py's _apply_operator_update), so calling this once per mode
+    with each mode's own budget is equivalent to one combined reconcile and
+    considerably simpler to read.
     """
-    global _desired_vehicle
+    stmt = (
+        select(Camera)
+        .where(enabled_column.is_(True))
+        # Cameras that can actually read a plate come first -- a slot
+        # spent on a camera surveyed as unreadable is a slot an
+        # ANPR-viable camera isn't using.
+        .order_by(Camera.anpr_viable.desc().nullslast(), Camera.camera_number)
+    )
+    enabled = (await session.execute(stmt)).scalars().all()
+    should_run = {c.camera_id for c in enabled[:budget]}
+
+    # 1. Stop workers that are no longer wanted -- either the operator
+    #    turned the camera off, or a higher-priority camera displaced it.
+    #    Frees the slot before we try to fill it.
+    for camera_id, worker_mode in [k for k in _workers if k[1] == mode]:
+        if camera_id not in should_run:
+            _stop_worker((camera_id, mode))
+            logger.info("Stopped %s analytics for camera %s (no longer scheduled)", mode, camera_id)
+
+    # 2. Start what's wanted and isn't running, unless it's still inside its
+    #    restart backoff from a recent failed launch.
+    for camera in enabled:
+        if camera.camera_id not in should_run:
+            continue
+        if (camera.camera_id, mode) in _workers:
+            continue
+        if not _may_start((camera.camera_id, mode)):
+            continue
+        try:
+            await _start_worker(camera.camera_id, mode, _DEFAULT_MODEL[mode], session)
+            logger.info("Auto-started %s analytics for camera %s", mode, camera.camera_id)
+        except Exception as exc:  # noqa: BLE001 - one camera's failure must not stop the tick
+            _last_error[(camera.camera_id, mode)] = f"failed to start: {exc}"
+            logger.warning("Auto-start failed for camera %s (%s): %s", camera.camera_id, mode, exc)
+
+    return [c.camera_id for c in enabled]
+
+
+async def supervisor_tick() -> None:
+    """Reconcile running "vehicle" (ANPR) and "vehicle_finetuned" workers
+    against what the operator asked for via `cameras.analytics_enabled` /
+    `analytics_finetuned_enabled`. See _reconcile_mode for the reconcile
+    shape shared by both.
+
+    "person" and "suspicious" are never touched here: both stay manual
+    (bonus analytics, GOV-FUN-013) rather than being part of the
+    continuous-ANPR requirement this exists to satisfy, and each has its own
+    independent concurrency budget so neither competes with the vehicle-
+    family budgets below.
+    """
+    global _desired_vehicle, _desired_vehicle_finetuned
 
     _reap_finished()
     settings = get_settings()
 
     async with async_session() as session:
-        stmt = (
-            select(Camera)
-            .where(Camera.analytics_enabled.is_(True))
-            # Cameras that can actually read a plate come first -- a slot
-            # spent on a camera surveyed as unreadable is a slot an
-            # ANPR-viable camera isn't using.
-            .order_by(Camera.anpr_viable.desc().nullslast(), Camera.camera_number)
-        )
-        enabled = (await session.execute(stmt)).scalars().all()
-        _desired_vehicle = [c.camera_id for c in enabled]
-
-        budget = settings.max_concurrent_vehicle_workers
-        should_run = {c.camera_id for c in enabled[:budget]}
-
-        # 1. Stop vehicle workers that are no longer wanted -- either the
-        #    operator turned the camera off, or a higher-priority camera
-        #    displaced it. Frees the slot before we try to fill it.
-        for camera_id, mode in [k for k in _workers if k[1] == "vehicle"]:
-            if camera_id not in should_run:
-                _stop_worker((camera_id, "vehicle"))
-                logger.info("Stopped ANPR analytics for camera %s (no longer scheduled)", camera_id)
-
-        # 2. Start what's wanted and isn't running, unless it's still inside
-        #    its restart backoff from a recent failed launch.
-        for camera in enabled:
-            if camera.camera_id not in should_run:
-                continue
-            if (camera.camera_id, "vehicle") in _workers:
-                continue
-            if not _may_start((camera.camera_id, "vehicle")):
-                continue
-            try:
-                await _start_worker(camera.camera_id, "vehicle", _DEFAULT_MODEL["vehicle"], session)
-                logger.info("Auto-started ANPR analytics for camera %s (analytics_enabled)", camera.camera_id)
-            except Exception as exc:  # noqa: BLE001 - one camera's failure must not stop the tick
-                _last_error[(camera.camera_id, "vehicle")] = f"failed to start: {exc}"
-                logger.warning("Auto-start failed for camera %s: %s", camera.camera_id, exc)
+        _desired_vehicle = await _reconcile_mode(
+            "vehicle", Camera.analytics_enabled, settings.max_concurrent_vehicle_workers, session)
+        _desired_vehicle_finetuned = await _reconcile_mode(
+            "vehicle_finetuned", Camera.analytics_finetuned_enabled,
+            settings.max_concurrent_vehicle_finetuned_workers, session)
 
 
 async def supervisor_loop() -> None:

@@ -27,6 +27,18 @@ Also tallies per-class detections across the whole run and prints a summary
 at the end -- the quantity you actually want when *testing* a model, as
 opposed to watching it live.
 
+Relationship to the live "ANPR finetuned" feature (backend/app/routers/
+analytics.py, frontend AnalyticsToggle.jsx): that feature runs the exact
+same checkpoint through observation_worker.py -- for continuous, alerting
+ANPR monitoring against real camera feeds -- while this script is for a
+quick offline look at one video file, no backend/DB/camera registry
+involved. Both read DEFAULT_FINETUNED_MODEL/_FINETUNED_VEHICLE_MODEL from
+one place each; keep the two paths in sync if a new fine-tuning round
+produces a different checkpoint. observation_worker.py fixes the same
+class-id-mismatch problem described above the same way this script does
+(model.names read at runtime, not hardcoded) -- car_tracking.py itself
+remains untouched either way.
+
 Usage:
     python test_finetuned.py                                   # ahmedabad.mp4, fine-tuned weights, display
     python test_finetuned.py --source path/to/video.mp4

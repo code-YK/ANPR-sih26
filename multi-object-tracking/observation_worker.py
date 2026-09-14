@@ -37,8 +37,37 @@ from ultralytics import YOLO
 import camera_feeds as feeds
 import plates as plates_mod
 import tracking_common as tc
-from car_tracking import VEHICLE_CLASSES, VEHICLE_COLORS
 from worker_telemetry import TelemetryWriter
+
+# Canonical vehicle class names this worker knows about, and their display
+# color (BGR). Kept self-contained here rather than imported from
+# car_tracking.py so this worker's correctness never depends on that
+# interactive script's own VEHICLE_CLASSES (which is hardcoded to COCO ids
+# and is wrong for a fine-tuned checkpoint with different class numbering --
+# see multi-object-tracking/test_finetuned.py's docstring for the exact
+# failure mode that produces: near-zero detections and mislabeled classes).
+VEHICLE_COLORS_BY_NAME = {
+    "car": (0, 200, 255),           # orange
+    "motorcycle": (255, 100, 0),    # blue
+    "bus": (0, 255, 100),           # green
+    "truck": (100, 0, 255),         # purple
+    "auto_rickshaw": (180, 0, 255), # magenta
+}
+
+
+def build_vehicle_maps(model):
+    """Derive {class_id: name} and {class_id: color} from a loaded model's own
+    `model.names`, filtered to the vehicle classes this worker knows about.
+
+    Always call this after `YOLO(args.model)`, never hardcode ids: this
+    worker is launched with either the baseline yolo11x.pt (COCO ids
+    2/3/5/7 = car/motorcycle/bus/truck) or the fine-tuned veh5 checkpoint
+    (its own 0..4 numbering, adds auto_rickshaw) depending on --model, and a
+    hardcoded mapping is only ever correct for one of the two.
+    """
+    classes = {cid: name for cid, name in model.names.items() if name in VEHICLE_COLORS_BY_NAME}
+    colors = {cid: VEHICLE_COLORS_BY_NAME[name] for cid, name in classes.items()}
+    return classes, colors
 
 
 def parse_args():
@@ -64,6 +93,13 @@ def parse_args():
     parser.add_argument("--telemetry-dir", type=str, default="worker_logs",
                         help="Where to publish detector status/snapshot files "
                              "(default: worker_logs)")
+    parser.add_argument("--telemetry-mode", type=str, default="vehicle",
+                        help="Mode tag in published telemetry filenames, "
+                             "camera-<id>-<mode>.status.json/.jpg (default: vehicle). "
+                             "The backend's analytics.py passes 'vehicle_finetuned' "
+                             "here when this worker is running the fine-tuned "
+                             "checkpoint, so its telemetry doesn't collide with or "
+                             "get looked up under a baseline worker's files.")
     parser.add_argument("--evidence-dir", type=str, default=None,
                         help="Absolute path to write per-sighting evidence crops "
                              "under (Section 5 Phase 3). Omit to skip evidence "
@@ -180,6 +216,11 @@ def main():
     print(f"[Worker] Report:  {args.report_to}/api/sightings")
 
     model = YOLO(args.model)
+    vehicle_classes, vehicle_colors = build_vehicle_maps(model)
+    print(f"[Worker] Classes: {vehicle_classes}")
+    if not vehicle_classes:
+        print("[Worker] WARNING: none of this model's class names match car/motorcycle/bus/truck/"
+              "auto_rickshaw -- check --model's own model.names.")
 
     print(f"[Worker] Connecting (up to {args.open_timeout:.0f}s)...")
     reader = feeds.LiveFrameReader(
@@ -202,8 +243,8 @@ def main():
     reported_tracks = set()  # track_ids already POSTed, so a track reports once
 
     telemetry = TelemetryWriter(
-        args.camera_id, "vehicle", args.telemetry_dir,
-        class_names=VEHICLE_CLASSES, class_colors=VEHICLE_COLORS,
+        args.camera_id, args.telemetry_mode, args.telemetry_dir,
+        class_names=vehicle_classes, class_colors=vehicle_colors,
     )
 
     timing = tc.Timing()
@@ -244,7 +285,7 @@ def main():
             with timing:
                 results = model.track(
                     frame, persist=True, tracker=args.tracker, conf=args.conf,
-                    classes=list(VEHICLE_CLASSES.keys()), device=device,
+                    classes=list(vehicle_classes.keys()), device=device,
                     quantize=quantize, imgsz=args.imgsz, verbose=False,
                 )
             result = results[0]
@@ -331,7 +372,7 @@ def main():
                 payload = {
                     "camera_id": args.camera_id,
                     "plate": text,
-                    "vehicle_type": VEHICLE_CLASSES.get(cls_id),
+                    "vehicle_type": vehicle_classes.get(cls_id),
                     "confidence": confirmed_confidence(plate_reader, track_id, text),
                     "seen_at": seen_at.isoformat(),
                     "frame_pts_ms": int(pts_ms) if pts_ms is not None else None,

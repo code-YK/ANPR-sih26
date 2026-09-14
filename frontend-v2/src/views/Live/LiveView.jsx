@@ -80,6 +80,11 @@ export default function LiveView() {
     setDetectorMode("vehicle");
     setDetectorRestartKey((key) => key + 1);
   }, []);
+  // Same reasoning, for the fine-tuned checkpoint's own telemetry mode.
+  const showVehicleFinetunedDetector = useCallback(() => {
+    setDetectorMode("vehicle_finetuned");
+    setDetectorRestartKey((key) => key + 1);
+  }, []);
 
   const handleVisibilityChange = useCallback((cameraId, visible) => {
     setVisibleIds((prev) => {
@@ -100,12 +105,16 @@ export default function LiveView() {
   // visible tile instead would mean one request per camera every 5s.
   const [analyticsStatus, setAnalyticsStatus] = useState([]);
   const [vehicleCapacity, setVehicleCapacity] = useState(null);
+  const [vehicleFinetunedCapacity, setVehicleFinetunedCapacity] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     api("/analytics/capacity")
       .then((c) => {
-        if (!cancelled) setVehicleCapacity(c.vehicle);
+        if (!cancelled) {
+          setVehicleCapacity(c.vehicle);
+          setVehicleFinetunedCapacity(c.vehicle_finetuned);
+        }
       })
       .catch(() => {});
     return () => {
@@ -130,6 +139,10 @@ export default function LiveView() {
   }, [analyticsStatus]);
   const vehicleRunningCount = analyticsStatus.filter((e) => e.mode === "vehicle" && e.state === "running").length;
   const vehicleQueuedCount = analyticsStatus.filter((e) => e.mode === "vehicle" && e.state === "queued").length;
+  const vehicleFinetunedRunningCount = analyticsStatus.filter(
+    (e) => e.mode === "vehicle_finetuned" && e.state === "running").length;
+  const vehicleFinetunedQueuedCount = analyticsStatus.filter(
+    (e) => e.mode === "vehicle_finetuned" && e.state === "queued").length;
 
   useEffect(() => {
     window.localStorage.setItem(STREAM_LIMIT_STORAGE_KEY, String(streamLimit));
@@ -257,6 +270,15 @@ export default function LiveView() {
             {vehicleQueuedCount > 0 && <strong> · {vehicleQueuedCount} queued</strong>}
           </span>
         )}
+        {vehicleFinetunedCapacity != null && (
+          <span
+            className="hint"
+            title="Same idea as ANPR above, for the fine-tuned checkpoint. Deliberately capped low (see backend/app/config.py) -- this is for evaluating the fine-tune, not scaled monitoring."
+          >
+            {" "}· ANPR finetuned {vehicleFinetunedRunningCount} of {vehicleFinetunedCapacity} running
+            {vehicleFinetunedQueuedCount > 0 && <strong> · {vehicleFinetunedQueuedCount} queued</strong>}
+          </span>
+        )}
       </div>
 
       <div className="live-layout">
@@ -294,6 +316,7 @@ export default function LiveView() {
               camera={focusedCamera}
               onCameraUpdated={refresh}
               onAnprEnabled={showVehicleDetector}
+              onAnprFinetunedEnabled={showVehicleFinetunedDetector}
             />
 
             <h4>
@@ -306,13 +329,18 @@ export default function LiveView() {
               </span>
             </h4>
             <div className="detector-mode-switch">
-              {["vehicle", "person", "suspicious"].map((m) => (
+              {[
+                ["vehicle", "vehicle"],
+                ["vehicle_finetuned", "vehicle finetuned"],
+                ["person", "person"],
+                ["suspicious", "suspicious"],
+              ].map(([m, label]) => (
                 <button
                   key={m}
                   className={detectorMode === m ? "link-btn active" : "link-btn"}
                   onClick={() => setDetectorMode(m)}
                 >
-                  {m}
+                  {label}
                 </button>
               ))}
             </div>

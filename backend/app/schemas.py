@@ -56,6 +56,7 @@ class CameraOut(BaseModel):
     last_successful_connect: datetime | None
     health_reason: str | None
     analytics_enabled: bool
+    analytics_finetuned_enabled: bool
 
     # A plain internal reference id, not sensitive like the source's URL/
     # credential fields -- NULL means the official sandbox catalogue sync
@@ -107,6 +108,7 @@ class CameraOperatorUpdate(BaseModel):
     anpr_notes: str | None = None
 
     analytics_enabled: bool | None = None
+    analytics_finetuned_enabled: bool | None = None
 
     def validate_choices(self) -> list[str]:
         return _validate_choice_fields(

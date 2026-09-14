@@ -101,6 +101,14 @@ class Camera(Base):
     # UI only ever sets this column; the analytics supervisor is what
     # actually spawns/stops the worker, on its own periodic tick.
     analytics_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    # Same shape as analytics_enabled, but for the fine-tuned veh5 checkpoint
+    # instead of the baseline yolo11x -- an operator evaluating whether the
+    # fine-tune is worth swapping in, run continuously like real ANPR rather
+    # than a one-off test. Mutually exclusive with analytics_enabled per
+    # camera (enforced in routers/cameras.py's _apply_operator_update): a
+    # camera never has both set, so the supervisor never needs to arbitrate
+    # two vehicle-family workers wanting the same camera.
+    analytics_finetuned_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

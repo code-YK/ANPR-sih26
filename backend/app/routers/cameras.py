@@ -61,6 +61,21 @@ def _apply_operator_update(camera: Camera, update: CameraOperatorUpdate) -> None
     for field, value in fields.items():
         setattr(camera, field, value)
 
+    # analytics_enabled (baseline yolo11x) and analytics_finetuned_enabled
+    # (the fine-tuned veh5 checkpoint) are mutually exclusive per camera --
+    # only one vehicle-family detector should ever run against a camera at
+    # once, both for GPU headroom on this hardware (see finetune/decision.md
+    # D7) and because two workers publishing to the same "vehicle" telemetry
+    # slot would be meaningless. Enforced here, not just in the frontend, so
+    # it holds regardless of caller. Whichever was just explicitly turned on
+    # wins; if both were somehow requested in the same call, finetuned takes
+    # priority since PUT applies fields in declaration order above and this
+    # runs after, so the last assignment here is authoritative.
+    if fields.get("analytics_enabled") is True:
+        camera.analytics_finetuned_enabled = False
+    if fields.get("analytics_finetuned_enabled") is True:
+        camera.analytics_enabled = False
+
     if "latitude" in fields or "longitude" in fields:
         if camera.latitude is not None and camera.longitude is not None:
             camera.geog = WKTElement(f"POINT({camera.longitude} {camera.latitude})", srid=4326)
