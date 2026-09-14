@@ -1,0 +1,121 @@
+# Every dataset in raw/ gets one entry here. Paths are relative to finetune/.
+# ALWAYS run `scripts/prepare_dataset.py --dry-run` after editing this file.
+# Every accept / reject / setting below comes from scripts/inspect_source.py audits
+# (runs/inspect/<name>/) -- the numbers are quoted in the comments and in README section 1.
+#
+# format            yolo (needs root: one folder or a list) | voc (needs images + annotations)
+# labelled_classes  classes boxed EXHAUSTIVELY: all, or a list; autolabel.py fills the others
+#                   with the baseline yolo11x (never auto_rickshaw)
+# split_method      balanced (default) group-aware, stratified on images + boxes per class
+#                   native    the dataset's own train/val(valid)/test folders
+#                   hash      group-aware deterministic hash (less balanced)
+#                   fixed     everything into `fixed_split` (a benchmark folder, never trained on)
+# group_by          image | parent | stem_prefix (filename up to the last '_': drive / camera / video)
+# dedupe_augmented  true = one copy per Roboflow-augmented original (copies are near-duplicates)
+# max_per_group     evenly spaced frames kept per group, before splitting (consecutive CCTV frames)
+# max_images        int = random cap on the pool; {train: N, val: N, test: N} = cap each split
+# degrade           false = degrade.py never makes synthetic copies (already real night footage)
+# class_map         per-source raw name -> canonical name (or null), overrides classes.yaml aliases
+
+sources:
+  # ================================================================ TRAINING MIX
+  # IDD Detection, YOLOv11 re-export (Kaggle: redzapdos123). CC BY-NC-SA 4.0 + IDD research terms.
+  # Audit: 0.4 likely-unlabelled cars per 100 boxes, box tightness 0.849 -> the quality reference.
+  # Its own 8:1:1 split puts frames of the SAME drive in train/val/test (~2/3 of val/test share a
+  # drive with train, ~60 frames apart) -> pooled and re-split by drive sequence.
+  - name: idd
+    enabled: true
+    format: yolo
+    root: raw/IDDDetectionsYOLODataset
+    labelled_classes: all
+    split_method: balanced
+    group_by: stem_prefix
+    split: [0.80, 0.10, 0.10]
+    max_images: {train: 6000, val: 1000, test: 3000}
+
+  # DAWN (Mendeley DOI 10.17632/766ygrbt8y.3), CC BY-NC 3.0. Real fog + rain. No autos (non-Indian).
+  - name: dawn_fog
+    enabled: true
+    format: voc
+    images: raw/Fog
+    annotations: raw/Fog/Fog_PASCAL_VOC
+    labelled_classes: all
+    split_method: balanced
+    group_by: image
+    split: [0.70, 0.15, 0.15]
+
+  - name: dawn_rain
+    enabled: true
+    format: voc
+    images: raw/Rain
+    annotations: raw/Rain/Rain_PASCAL_VOC
+    labelled_classes: all
+    split_method: balanced
+    group_by: image
+    split: [0.70, 0.15, 0.15]
+
+  # Vehicle Detection Night time v5 (Roboflow: duong-tran), CC BY 4.0. Real overhead CCTV at night,
+  # rain and glare -- the closest public match to the deployment cameras. Unpacked into two folders.
+  # Audit:
+  #   raw classes '4','5','6','7' = motorbike, car, bus, truck (teacher matrix + contact sheets)
+  #   33,909 images = 2 near-identical copies of 16,964 originals (390/400 sampled pairs unrotated)
+  #   only 14 scenes: 10 fixed cameras (~1,000 originals each) + 4 videos (one of 6k originals)
+  #   likely-unlabelled cars 10.2 per 100 boxes (IDD: 0.4) -> cars treated as NOT exhaustive,
+  #   autolabel.py fills them; motorbike/bus/truck unlabelled rate <= 0.6 -> trusted
+  #   box tightness 0.840 (IDD 0.849) -> fine
+  # -> one copy per original, 200 evenly spaced frames per scene, split by scene 70/15/15 so val
+  #    and test are cameras/videos never seen in training.
+  #
+  # REJECTED for v5 (kept configured for a clean re-download). Roboflow applied BOUNDING-BOX-LEVEL
+  # rotation (+-15 deg) and blur: the pixels inside every box are rotated, leaving a visible dashed
+  # seam rectangle around each vehicle. Measured on 120 original pairs: outside-box pixels identical
+  # (mean |A-B| 0.07), inside-box pixels differ (18.4) in 120/120, seams visible in BOTH copies ->
+  # no clean copy exists. An outline around every object is a trivially learnable shortcut, so
+  # training on it teaches "seam = vehicle" instead of night appearance.
+  # To use this source: on its Roboflow Universe page pick a version whose augmentations are "none"
+  # (or with image-level augmentation only), download YOLOv11, replace the two folders, re-run
+  # inspect_source.py (README section 4), set dedupe_augmented: false, enabled: true.
+  - name: night_duong
+    enabled: false
+    format: yolo
+    root: [raw/night_duong, "raw/Vehicle Detection Night time.v5i.yolov11"]
+    class_map: {"4": motorcycle, "5": car, "6": bus, "7": truck}
+    labelled_classes: [motorcycle, bus, truck, auto_rickshaw]   # car filled by autolabel; no autos in Vietnam
+    dedupe_augmented: true
+    max_per_group: 200
+    split_method: balanced
+    group_by: stem_prefix
+    split: [0.70, 0.15, 0.15]
+    degrade: false
+
+  # ================================================================ BENCHMARK ONLY (never trained on)
+  # vehicle detection from cctv (night) v4 (Roboflow: Thammasat University), CC BY 4.0.
+  # Real night CCTV incl. IR greyscale, 444 images, no augmentation, 5 resolutions (384x288..2688x1520).
+  # NOT for training: contact sheets show partial motorbike labelling (e.g. 2 of ~8 boxed), and
+  # 'heavy vehicle' merges bus+truck (teacher could resolve only 217 of 302 boxes). Incomplete labels
+  # would teach "vehicle = background". Recall of what IS labelled is still a valid measurement:
+  #   evaluate.py --split bench_night --recall-only   (bus/truck scored as one group, IR vs colour)
+  - name: night_thammasat
+    enabled: true
+    format: yolo
+    root: raw/night_thammasat
+    class_map: {heavy vehicle: truck}   # recall-only scoring merges bus+truck, so this is lossless there
+    labelled_classes: all               # keeps autolabel away from benchmark labels
+    split_method: fixed
+    fixed_split: bench_night
+    group_by: image
+    degrade: false
+
+  # ================================================================ REJECTED
+  # Nighttime Vehicle detection v1 (Roboflow: RVCE Bangalore), CC BY 4.0. Contact sheets: mostly
+  # DAYTIME web / catalogue photos of single cars, not night traffic; every image stretched to 416x416
+  # and tripled with shear + flip (2.4 copies per original); only Motorcycle/car/pedestrian labelled
+  # (no bus/truck/auto on Indian roads); box tightness 0.732 vs IDD 0.849; 10.5 unlabelled cars per 100.
+  # Adds label noise and off-domain images, no night CCTV signal -> excluded.
+  - name: night_rvce
+    enabled: false
+    format: yolo
+    root: raw/night_rvce
+    labelled_classes: [motorcycle, car]
+    split_method: native
+    group_by: image

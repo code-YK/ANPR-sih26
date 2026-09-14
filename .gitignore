@@ -47,6 +47,16 @@ backend/survey/*.png
 # Analytics worker runtime logs (operational output, not source)
 multi-object-tracking/worker_logs/
 
+# Vehicle-model fine-tuning: scripts/, configs/ and README.md are committed;
+# generated and data folders stay local -- licensed third-party datasets,
+# real camera frames, training runs, weights and logs.
+/multi-object-tracking/finetune/raw/
+/multi-object-tracking/finetune/datasets/
+/multi-object-tracking/finetune/runs/
+/multi-object-tracking/finetune/weights/
+/multi-object-tracking/finetune/logs/
+/multi-object-tracking/finetune/**/*.zip
+
 # Uploaded/normalised recordings and their derived thumbnails (Investigate)
 # -- real CCTV footage and vehicle crops, same reasoning as the survey
 # stills above. Only backend/recordings/<sha256>/... paths ever get

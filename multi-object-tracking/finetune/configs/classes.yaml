@@ -1,0 +1,76 @@
+# Canonical classes for the Indian-road vehicle model.
+#
+# ORDER IS THE CONTRACT: list index == class id inside the trained .pt.
+# When the model is swapped in, VEHICLE_CLASSES in car_tracking.py becomes
+#   {0: "car", 1: "motorcycle", 2: "bus", 3: "truck", 4: "auto_rickshaw"}
+# Never reorder after training; append only (and retrain).
+names:
+  - car
+  - motorcycle
+  - bus
+  - truck
+  - auto_rickshaw
+
+# Class ids of the same objects in the COCO-pretrained yolo11x.pt baseline.
+# Used by autolabel.py / extract_frames.py (pre-labelling) and evaluate.py
+# (baseline comparison). auto_rickshaw has no COCO equivalent.
+coco_ids:
+  car: 2
+  motorcycle: 3
+  bus: 5
+  truck: 7
+
+# Raw class name in a downloaded dataset -> canonical name.
+# Matching ignores case, spaces, '-' and '_' ("Auto-Rickshaw" == "autorickshaw").
+#   null        -> dropped on purpose
+#   not listed  -> dropped AND reported as UNMAPPED by prepare_dataset.py --dry-run
+# Per-dataset overrides go in sources.yaml (class_map), not here.
+aliases:
+  car: car
+  cars: car
+  sedan: car
+  suv: car
+  hatchback: car
+  taxi: car
+  jeep: car
+  van: car
+  motorcycle: motorcycle
+  motorbike: motorcycle
+  motorcycles: motorcycle
+  bike: motorcycle
+  scooter: motorcycle
+  scooty: motorcycle
+  two wheeler: motorcycle
+  bus: bus
+  buses: bus
+  minibus: bus
+  truck: truck
+  trucks: truck
+  lorry: truck
+  pickup: truck
+  mini truck: truck
+  tempo: truck
+  autorickshaw: auto_rickshaw
+  auto rickshaw: auto_rickshaw
+  auto: auto_rickshaw
+  autos: auto_rickshaw
+  tuk tuk: auto_rickshaw
+  three wheeler: auto_rickshaw
+  e rickshaw: auto_rickshaw
+
+  # Deliberately dropped. "rickshaw" alone is ambiguous (cycle-rickshaw vs
+  # auto) -- look at the dataset's images and map it per source instead.
+  rickshaw: null
+  bicycle: null
+  person: null
+  pedestrian: null
+  rider: null
+  animal: null
+  traffic sign: null
+  traffic light: null
+  train: null
+  caravan: null
+  trailer: null
+  vehicle fallback: null
+  license plate: null
+  number plate: null

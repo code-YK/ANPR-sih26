@@ -1,0 +1,55 @@
+# Training hyper-parameters, passed straight to Ultralytics model.train() (except `safety`).
+# CLI flags on scripts/train.py override the most common ones.
+# Every run copies this file into runs/<name>/ so results stay reproducible.
+# model / imgsz / batch / workers were chosen from measurements -- read decision.md before changing them.
+
+model: yolo11x.pt          # COCO-pretrained start; resolved from multi-object-tracking/ (decision.md D1)
+data: datasets/veh5/data.yaml
+
+epochs: 50                 # max epochs; the cosine LR schedule is planned over this length (D4)
+patience: 12               # early stop if val mAP50-95 hasn't improved for 12 epochs
+imgsz: 960                 # = tracker inference size
+batch: 2                   # FIXED. Measured peak 4.93 GB on the 8 GB RTX 5060. Never AutoBatch here (D2)
+nbs: 64                    # gradients accumulate over 64 images per optimizer step (32 x batch 2) (D3)
+workers: 1                 # measured: 1 worker = 8.17 img/s / 2.9 GB RAM free; 2 = 8.26 img/s / 1.7 GB free (D7)
+cache: false               # RAM caching doesn't fit in 16 GB; disk caching isn't worth ~20 GB
+amp: true                  # FP16 mixed precision: required for the memory numbers above
+seed: 0
+deterministic: true
+
+optimizer: auto
+cos_lr: true
+close_mosaic: 10           # last 10 epochs without mosaic -> better real-image calibration
+
+# Checkpoints (runs/<name>/weights/):
+#   last.pt     every epoch -- resume point
+#   best.pt     overwritten whenever val fitness improves; fitness = mAP50-95 (Ultralytics 8.4)
+#   epochN.pt   snapshot every save_period epochs (~110 MB each for yolo11x)
+save_period: 10
+plots: true
+val: true
+
+# Loss: YOLO11 defaults -- CIoU box + BCE classification + Distribution Focal Loss,
+# task-aligned assigner. Kept explicit so the run config documents itself.
+box: 7.5
+cls: 0.5
+dfl: 1.5
+
+# Geometric/colour augmentation. flipud stays 0 (vehicles aren't upside down).
+mosaic: 1.0
+mixup: 0.0
+scale: 0.5
+translate: 0.1
+degrees: 0.0
+fliplr: 0.5
+flipud: 0.0
+hsv_h: 0.015
+hsv_s: 0.6
+hsv_v: 0.4
+
+# Not an Ultralytics argument: read and removed by scripts/train.py (decision.md D7).
+safety:
+  max_vram_fraction: 0.80  # hard VRAM cap (6.4 GB): out-of-memory error instead of freezing Windows
+  min_free_ram_gb: 1.5     # stop cleanly (resumable) if free system RAM stays below this
+  slow_step_factor: 4.0    # a step this many times slower than the running median...
+  slow_step_patience: 20   # ...for this many consecutive steps = memory spilling -> stop cleanly
