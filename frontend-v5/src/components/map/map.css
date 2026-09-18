@@ -1,0 +1,102 @@
+/* Leaflet on the dark surface. Tiles are standard OpenStreetMap, darkened
+   with a filter (no API key, no extra third-party dependency). */
+.sentinel-dark-tiles {
+  filter: invert(100%) hue-rotate(200deg) brightness(82%) contrast(88%) saturate(55%);
+}
+
+.leaflet-container {
+  background: var(--surface-2);
+  font-family: var(--font-ui);
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--surface-3);
+  color: var(--text-1);
+  box-shadow: var(--shadow-pop);
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 12px;
+}
+
+.leaflet-popup-content {
+  margin: 12px 14px;
+  font-size: var(--fs-caption);
+  line-height: 1.5;
+}
+
+.leaflet-popup-content strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: var(--fs-body);
+}
+
+.leaflet-container a.leaflet-popup-close-button {
+  color: var(--text-3);
+}
+
+.leaflet-container a.leaflet-popup-close-button:hover {
+  color: var(--text-1);
+}
+
+.leaflet-bar {
+  border: 0 !important;
+  box-shadow: var(--shadow-pop) !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+}
+
+.leaflet-bar a {
+  background: var(--surface-3) !important;
+  border-color: var(--line) !important;
+  color: var(--text-1) !important;
+}
+
+.leaflet-bar a:hover {
+  background: var(--surface-4) !important;
+}
+
+.leaflet-control-attribution {
+  background: var(--overlay) !important;
+  color: var(--text-3) !important;
+  font-size: 10px;
+}
+
+.leaflet-control-attribution a {
+  color: var(--text-2) !important;
+}
+
+.sentinel-route-marker {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--text-1);
+  color: var(--canvas);
+  font-family: var(--font-data);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow:
+    0 0 0 3px var(--canvas),
+    0 4px 10px oklch(0% 0 0 / 0.5);
+  transition: transform var(--dur-base) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+
+.sentinel-route-marker[data-active="true"] {
+  background: var(--signal);
+  color: var(--on-signal);
+  transform: scale(1.18);
+}
+
+.sentinel-pin {
+  width: 18px;
+  height: 18px;
+  border-radius: 50% 50% 50% 0;
+  background: var(--signal-fill);
+  transform: rotate(-45deg);
+  box-shadow:
+    0 0 0 3px oklch(97% 0 0),
+    0 6px 14px oklch(0% 0 0 / 0.5);
+}

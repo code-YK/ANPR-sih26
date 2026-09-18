@@ -1,0 +1,154 @@
+/*
+ * Sentinel v5 design tokens -- "Dusk".
+ *
+ * A soft slate interface: the chrome stays quiet and low-chroma so colour on
+ * screen always means something -- the detector's own box colours, urgency,
+ * or the one periwinkle "signal" used for AI activity and the primary action.
+ *
+ * Colour is OKLCH. Neutrals are one hue at chroma <= 0.016 with lightness
+ * stepping evenly; nothing is pure black, and video wells sit darker than the
+ * page so footage reads as a screen. Accents share a moderate chroma (~0.1)
+ * rather than maxing it, which is what keeps them soft instead of neon.
+ *
+ * Every value is in the sRGB gamut, and every text/fill pair below was checked
+ * for WCAG AA (ratios noted against surface-1 unless stated).
+ */
+:root {
+  color-scheme: dark;
+
+  /* ---- Neutrals: soft slate ------------------------------------------------ */
+  --hue: 255;
+  --canvas: oklch(21.5% 0.012 var(--hue));    /* #161a1f */
+  --video-bg: oklch(16.5% 0.01 var(--hue));   /* #0b0f13 */
+  --surface-1: oklch(24% 0.013 var(--hue));   /* #1b2025 */
+  --surface-2: oklch(26.8% 0.014 var(--hue)); /* #21262d */
+  --surface-3: oklch(30% 0.015 var(--hue));   /* #292e35 */
+  --surface-4: oklch(34% 0.016 var(--hue));   /* #323840 */
+  --line: oklch(90% 0.02 var(--hue) / 0.075);
+  --line-strong: oklch(90% 0.02 var(--hue) / 0.13);
+  --line-hover: oklch(90% 0.02 var(--hue) / 0.22);
+  --highlight: inset 0 1px 0 oklch(100% 0 0 / 0.035);
+
+  --text-1: oklch(94.5% 0.007 var(--hue));  /* 14:1 */
+  --text-2: oklch(80% 0.012 var(--hue));    /* 7.3:1 on surface-3 */
+  --text-3: oklch(69% 0.014 var(--hue));    /* 5.9:1; 4.9:1 on surface-3 */
+  --text-4: oklch(55% 0.014 var(--hue));    /* disabled and decorative only */
+
+  /* ---- Signal: AI activity, primary action, selection ------------------- */
+  --signal: oklch(78% 0.1 268);             /* 8.2:1 */
+  --signal-fill: oklch(55.5% 0.125 268);    /* white text 4.7:1 */
+  --signal-fill-hover: oklch(59.5% 0.125 268);
+  --signal-soft: oklch(72% 0.1 268 / 0.15);
+  --signal-line: oklch(74% 0.1 268 / 0.4);
+  --on-signal: oklch(99% 0.004 268);
+
+  /* ---- Urgency: the only other hues in the interface --------------------- */
+  --live: oklch(81% 0.1 158);               /* sage, 7.9:1 on surface-3 */
+  --live-soft: oklch(81% 0.1 158 / 0.14);
+  --pending: oklch(85% 0.1 80);             /* sand/sodium, 8.6:1 on surface-3 */
+  --pending-soft: oklch(85% 0.1 80 / 0.14);
+  --critical: oklch(75% 0.125 24);          /* coral, 5.8:1 on surface-3 */
+  --critical-fill: oklch(55.5% 0.15 25);    /* white text 5:1 */
+  --critical-soft: oklch(75% 0.125 24 / 0.15);
+
+  /* ---- Over video: chips and scrims that must read on any frame --------- */
+  --overlay: oklch(17% 0.012 var(--hue) / 0.76);
+  --overlay-strong: oklch(15% 0.012 var(--hue) / 0.86);
+  --ai-chip-bg: oklch(34% 0.06 268 / 0.9);
+  --ai-chip-fg: oklch(93% 0.03 268);        /* 9.6:1 */
+
+  /* ---- The plate as an object (HSRP-style) ------------------------------- */
+  --plate-face: oklch(97% 0.006 95);
+  --plate-ink: oklch(20% 0.02 262);
+  --plate-strip: oklch(48% 0.12 264);
+
+  /* ---- Detector legend: the worker's own BGR box colours, converted ------ */
+  --det-car: #ffc800;
+  --det-motorcycle: #0064ff;
+  --det-bus: #64ff00;
+  --det-truck: #ff0064;
+  --det-auto: #ff00b4;
+  --det-person: #00c800;
+  --det-danger: #ff0000;
+
+  /* Light enough that the page behind a sheet stays readable. */
+  --scrim: oklch(12% 0.012 var(--hue) / 0.5);
+
+  /* ---- Type -------------------------------------------------------------- */
+  --font-ui: "Mona Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --fs-display: 1.75rem;   /* 28 */
+  --fs-title: 1.25rem;     /* 20 */
+  --fs-heading: 1rem;      /* 16 */
+  --fs-body: 0.875rem;     /* 14 */
+  --fs-caption: 0.75rem;   /* 12 */
+  --fs-overline: 0.6875rem;/* 11 */
+  --fs-data: 0.8125rem;    /* 13 */
+  --fs-data-lg: 1.5rem;    /* 24 */
+
+  /* ---- Space: 4px base --------------------------------------------------- */
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.25rem;
+  --s-6: 1.5rem;
+  --s-8: 2rem;
+  --s-10: 2.5rem;
+  --s-12: 3rem;
+  --s-16: 4rem;
+
+  /* ---- Shape ------------------------------------------------------------- */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 9px;
+  --r-lg: 14px;
+  --r-xl: 18px;
+  --r-pill: 999px;
+
+  /* ---- Depth: borders and surface steps; soft shadow only when floating -- */
+  --shadow-float:
+    0 0 0 1px var(--line-strong),
+    0 12px 28px -14px oklch(10% 0.02 var(--hue) / 0.5),
+    0 36px 72px -28px oklch(10% 0.02 var(--hue) / 0.55);
+  --shadow-pop:
+    0 0 0 1px var(--line-strong),
+    0 10px 24px -10px oklch(10% 0.02 var(--hue) / 0.55);
+  --shadow-card: 0 0 0 1px var(--line), var(--highlight);
+
+  /* ---- Motion ------------------------------------------------------------ */
+  --dur-instant: 100ms;
+  --dur-fast: 150ms;
+  --dur-base: 250ms;
+  --dur-slow: 350ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* ---- Layers ------------------------------------------------------------ */
+  --z-tile: 10;
+  --z-sticky: 20;
+  --z-rail: 30;
+  --z-scrim: 40;
+  --z-sheet: 50;
+  --z-panel: 60;
+  --z-toast: 70;
+  --z-logs: 80;
+  --z-dialog: 85;
+  --z-tooltip: 90;
+
+  /* ---- Shell geometry ---------------------------------------------------- */
+  --topbar-h: 56px;
+  --rail-w: 64px;
+  --workspace-w: 384px;
+  --gutter: clamp(16px, 2.2vw, 32px);
+  --focus-ring: 0 0 0 2px var(--canvas), 0 0 0 4px var(--signal);
+}
+
+@media (max-width: 767px) {
+  :root {
+    --rail-w: 0px;
+    --topbar-h: 52px;
+  }
+}

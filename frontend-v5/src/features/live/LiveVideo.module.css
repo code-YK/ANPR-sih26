@@ -1,0 +1,88 @@
+.frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--video-bg);
+  isolation: isolate;
+}
+
+.video,
+.poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.video {
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease-out);
+}
+
+.video[data-ready="true"] {
+  opacity: 1;
+}
+
+.poster {
+  filter: saturate(0.85) brightness(0.9);
+}
+
+.connecting {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  transform: translate(-50%, -50%);
+  border-radius: var(--r-pill);
+  background: var(--overlay);
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  font-weight: 540;
+  white-space: nowrap;
+}
+
+.transport {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 2;
+}
+
+.transport :global(.ui-badge) {
+  background: var(--overlay);
+  backdrop-filter: none;
+}
+
+.unavailable {
+  display: grid;
+  place-items: center;
+  background:
+    repeating-linear-gradient(135deg, transparent 0 10px, oklch(100% 0 0 / 0.025) 10px 11px),
+    var(--video-bg);
+}
+
+.center {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+  color: var(--text-2);
+  font-size: var(--fs-body);
+}
+
+.center svg {
+  width: 22px;
+  height: 22px;
+  color: var(--text-3);
+}
+
+.center small {
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}

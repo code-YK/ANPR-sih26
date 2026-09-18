@@ -1,0 +1,422 @@
+.page {
+  padding: 20px var(--gutter) 64px;
+  animation: page-fade var(--dur-slow) var(--ease-out);
+}
+
+/* Opacity only: a transform on this ancestor would re-anchor the fixed sheet. */
+@keyframes page-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ---- Header ---------------------------------------------------------------- */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.titleBlock {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.title {
+  font-size: 1.5rem;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.location {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headerAside {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pager {
+  display: flex;
+  gap: 2px;
+}
+
+/* ---- Stage ------------------------------------------------------------------ */
+.stage {
+  display: grid;
+  align-items: start;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+}
+
+.stage[data-layout="docked"],
+.stage[data-layout="sheet"] {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.rawCol,
+.aiCol,
+.side {
+  min-width: 0;
+}
+
+.rawCol {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.columnHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 46px;
+}
+
+.columnTitle {
+  font-size: var(--fs-heading);
+  font-weight: 600;
+}
+
+.columnMeta {
+  font-family: var(--font-data);
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.feed {
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+/* The inference column, docked. */
+.aiCol {
+  position: relative;
+}
+
+/* The inference sheet: anchored left, wider than half the screen, leaving the
+   Workspace rail and part of the page visible to its right. */
+.aiCol[data-sheet] {
+  position: fixed;
+  z-index: var(--z-sheet);
+  top: var(--topbar-h);
+  bottom: 0;
+  left: 0;
+  width: min(max(62vw, 760px), calc(100vw - var(--rail-w) - 200px));
+  padding: 22px 28px 28px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface-1);
+  box-shadow:
+    1px 0 0 var(--line-strong),
+    24px 0 64px -24px oklch(10% 0.02 255 / 0.6);
+}
+
+.scrim {
+  position: fixed;
+  z-index: var(--z-scrim);
+  top: var(--topbar-h);
+  left: 0;
+  right: var(--rail-w);
+  bottom: 0;
+  background: var(--scrim);
+  cursor: pointer;
+}
+
+/* ---- Side column (no inference yet) --------------------------------------- */
+.side {
+  display: grid;
+  gap: 16px;
+  padding-top: 60px;
+}
+
+.aiCard {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding: 22px;
+  border-radius: var(--r-xl);
+  background: var(--surface-1);
+  box-shadow:
+    0 0 0 1px var(--signal-line),
+    0 18px 40px -28px oklch(55.5% 0.125 268 / 0.45);
+}
+
+.aiCardIcon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--signal-soft);
+  color: var(--signal);
+}
+
+.aiCardIcon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.aiCard h2 {
+  font-size: 1.25rem;
+}
+
+.aiCardLead {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+}
+
+.aiModes {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  margin: 4px 0;
+  padding: 12px 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.aiModes li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-body);
+}
+
+.aiModeName {
+  font-weight: 600;
+  min-width: 78px;
+}
+
+.aiModeDesc {
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+
+.aiCardAction,
+.aiCardAction button {
+  width: 100%;
+}
+
+.aiCardFoot {
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+
+.facts {
+  padding: 16px 18px;
+}
+
+.facts dl {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+}
+
+.facts dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--fs-body);
+}
+
+.facts dt {
+  color: var(--text-3);
+}
+
+.facts dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.factBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.earlier {
+  padding: 16px 18px;
+}
+
+.earlier h3 {
+  margin-bottom: 10px;
+  font-size: var(--fs-body);
+}
+
+.earlier ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.earlier li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ---- Filmstrip -------------------------------------------------------------- */
+.strip {
+  margin-top: 8px;
+}
+
+.stripHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.stripHeader h3 {
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.stripList {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  padding: 2px 2px 8px;
+  list-style: none;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+}
+
+.stripList li {
+  flex: 0 0 176px;
+  scroll-snap-align: start;
+}
+
+.stripTile {
+  display: grid;
+  gap: 7px;
+  border-radius: 10px;
+}
+
+.stripMedia {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--video-bg);
+  box-shadow: 0 0 0 1px var(--line);
+  transition: box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.stripTile:hover .stripMedia,
+.stripTile:focus-visible .stripMedia {
+  box-shadow: 0 0 0 1px var(--line-hover);
+}
+
+.stripTile:focus-visible {
+  box-shadow: none;
+}
+
+.stripTile:focus-visible .stripMedia {
+  box-shadow: var(--focus-ring);
+}
+
+.stripPoster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.stripEmpty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-4);
+  font-family: var(--font-data);
+  font-size: var(--fs-caption);
+  background: repeating-linear-gradient(135deg, transparent 0 8px, oklch(100% 0 0 / 0.025) 8px 9px);
+}
+
+.stripAi {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--ai-chip-bg);
+  color: var(--ai-chip-fg);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.stripName {
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Responsive -------------------------------------------------------------- */
+@media (max-width: 1100px) {
+  .stage,
+  .stage[data-layout="docked"],
+  .stage[data-layout="sheet"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* With inference running, the AI view leads on a single column. */
+  .stage[data-layout="docked"] .aiCol {
+    order: -1;
+  }
+
+  .side {
+    padding-top: 0;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+
+  .aiCol[data-sheet] {
+    top: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: min(92dvh, calc(100dvh - var(--topbar-h)));
+    border-radius: 18px 18px 0 0;
+    padding: 18px 18px 24px;
+    box-shadow: 0 -1px 0 var(--line-strong), 0 -24px 64px -24px oklch(0% 0 0 / 0.7);
+  }
+
+  .scrim {
+    right: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .header {
+    flex-wrap: wrap;
+  }
+  .headerAside {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .title {
+    font-size: 1.25rem;
+  }
+}

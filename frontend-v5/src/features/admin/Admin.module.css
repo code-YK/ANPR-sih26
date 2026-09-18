@@ -1,0 +1,339 @@
+/* Admin: one rhythm for every section -- a single-line bar (title left,
+   controls right), then one aligned surface. */
+
+.stack {
+  display: grid;
+  gap: 28px;
+}
+
+.block {
+  display: grid;
+  gap: 14px;
+}
+
+.sectionBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  flex-wrap: wrap;
+}
+
+.sectionTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.0625rem;
+  font-weight: 620;
+}
+
+.count {
+  min-width: 22px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-family: var(--font-data);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 20px;
+  text-align: center;
+}
+
+.sectionActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sectionActions :global(.ui-search) {
+  width: 220px;
+}
+
+.filterSelect {
+  width: 150px;
+}
+
+.muted {
+  color: var(--text-2);
+}
+
+.faint {
+  color: var(--text-3);
+}
+
+.truncate {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.footnote {
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+
+.inactive td {
+  opacity: 0.55;
+}
+
+/* ---- Person cell ------------------------------------------------------------ */
+.person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--text-1);
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.personText {
+  display: grid;
+  min-width: 0;
+}
+
+.personName {
+  font-weight: 580;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.personEmail {
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 4px 0 9px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-size: var(--fs-caption);
+  white-space: nowrap;
+}
+
+.chipLevel {
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: var(--surface-4);
+  color: var(--text-2);
+  font-size: 0.6875rem;
+}
+
+/* ---- Requests --------------------------------------------------------------- */
+.requests {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  box-shadow:
+    0 0 0 1px var(--signal-line),
+    var(--highlight);
+}
+
+.requestList {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.requestRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 120px auto;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0;
+}
+
+.requestRow + .requestRow {
+  border-top: 1px solid var(--line);
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+/* ---- Manage dialog ---------------------------------------------------------- */
+.grantTable {
+  display: grid;
+  gap: 2px;
+}
+
+.grantHead,
+.grantRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px 36px;
+  align-items: center;
+  gap: 12px;
+}
+
+.grantHead {
+  padding-bottom: 6px;
+  color: var(--text-3);
+  font-size: var(--fs-overline);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.grantRow {
+  min-height: 44px;
+  border-top: 1px solid var(--line);
+}
+
+.grantRow[data-add] {
+  grid-template-columns: minmax(0, 1fr) 130px auto;
+  margin-top: 6px;
+  padding-top: 12px;
+}
+
+.grantName {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.grantAction {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---- Forms --------------------------------------------------------- */
+.inlineForm {
+  display: flex;
+  gap: 8px;
+}
+
+.inlineForm input {
+  width: 200px;
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* ---- System settings ---------------------------------------------------------- */
+.settings {
+  display: grid;
+}
+
+.setting {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.setting + .setting {
+  border-top: 1px solid var(--line);
+}
+
+.settingIcon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--surface-3);
+  color: var(--text-2);
+}
+
+.setting[data-on] .settingIcon {
+  background: var(--signal-soft);
+  color: var(--signal);
+}
+
+.settingIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.settingText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settingTitle {
+  font-weight: 600;
+}
+
+.settingDescription {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+}
+
+.settingDetail {
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+
+.settingControl {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+@media (max-width: 760px) {
+  .requestRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .requestRow > :nth-child(2) {
+    display: none;
+  }
+  .sectionActions :global(.ui-search) {
+    width: 100%;
+  }
+  .setting {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+  .settingControl {
+    grid-column: 2;
+  }
+}

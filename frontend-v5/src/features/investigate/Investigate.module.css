@@ -1,0 +1,256 @@
+.drop {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 26px 16px;
+  border: 1.5px dashed var(--line-hover);
+  border-radius: 14px;
+  background: var(--surface-1);
+  color: var(--text-2);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+.drop:hover,
+.drop[data-has-file] {
+  border-color: var(--signal-line);
+  background: var(--surface-2);
+}
+
+.drop svg {
+  width: 24px;
+  height: 24px;
+  color: var(--text-3);
+}
+
+.drop input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.detailHeader {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+
+.detailHeader h2 {
+  font-size: 1.25rem;
+  word-break: break-all;
+}
+
+.runForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.runForm select {
+  width: auto;
+}
+
+.clickRow {
+  cursor: pointer;
+}
+
+.clickRow[data-selected] {
+  background: var(--signal-soft) !important;
+}
+
+.progress {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.trackGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.track {
+  display: flex;
+  gap: 12px;
+  padding: 10px;
+}
+
+.track[data-active] {
+  box-shadow: 0 0 0 1px var(--signal);
+}
+
+.trackThumb {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  flex: none;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 8px;
+  background: var(--video-bg);
+  font-size: var(--fs-caption);
+}
+
+.trackThumb img {
+  width: 100%;
+  height: 100%;
+  /* A crop is already cut to its box; cover would crop it a second time. */
+  object-fit: contain;
+}
+
+.trackBody {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.trackTop {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.trackMeta {
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+
+.lightbox {
+  width: 100%;
+  max-height: 70dvh;
+  object-fit: contain;
+  border-radius: 10px;
+  background: var(--video-bg);
+}
+
+.player {
+  display: grid;
+  gap: 10px;
+}
+
+.playerFrame {
+  position: relative;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--video-bg);
+}
+
+.playerFrame video {
+  width: 100%;
+  max-height: 70dvh;
+  object-fit: contain;
+}
+
+.playerFrame canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.modeSwitch {
+  justify-self: start;
+}
+
+.personForm {
+  display: grid;
+  grid-template-columns: minmax(0, 420px) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.preview {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.results {
+  display: grid;
+  gap: 12px;
+}
+
+.result {
+  display: flex;
+  gap: 16px;
+  padding: 12px;
+}
+
+.resultThumb {
+  display: grid;
+  place-items: center;
+  width: 120px;
+  height: 120px;
+  flex: none;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--video-bg);
+  font-size: var(--fs-caption);
+}
+
+.resultThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.resultBody {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  box-shadow: 0 0 0 1px var(--line);
+  font-size: var(--fs-caption);
+}
+
+.chip:hover {
+  box-shadow: 0 0 0 1px var(--line-hover);
+}
+
+@media (max-width: 640px) {
+  .personForm {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .result {
+    flex-direction: column;
+  }
+}
+
+.more {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+.playerAnchor {
+  scroll-margin-top: calc(var(--topbar-h) + 16px);
+}

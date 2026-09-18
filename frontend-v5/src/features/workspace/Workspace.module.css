@@ -1,0 +1,423 @@
+/* ---- Rail ------------------------------------------------------------------ */
+.rail {
+  position: fixed;
+  z-index: var(--z-rail);
+  top: var(--topbar-h);
+  right: 0;
+  bottom: 0;
+  width: var(--rail-w);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 0;
+  background: var(--canvas);
+  border-left: 1px solid var(--line);
+}
+
+@media (max-width: 767px) {
+  .rail {
+    display: none;
+  }
+}
+
+.railToggle {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.railToggle svg {
+  width: 19px;
+  height: 19px;
+}
+
+.railToggle:hover,
+.railToggle[aria-expanded="true"] {
+  background: var(--surface-4);
+  border-color: var(--line-hover);
+  color: var(--text-1);
+}
+
+.railCount {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--signal-fill);
+  color: var(--on-signal);
+  font-family: var(--font-data);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 19px;
+  box-shadow: 0 0 0 2px var(--canvas);
+}
+
+.railList {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.railCamera {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  width: 44px;
+  padding: 7px 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-1);
+  color: var(--text-1);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.railCamera:hover {
+  background: var(--surface-3);
+  border-color: var(--line-hover);
+}
+
+.railCameraLabel {
+  font-family: var(--font-data);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.pips {
+  display: flex;
+  gap: 3px;
+}
+
+.pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-4);
+}
+
+.pip[data-tone="live"] {
+  background: var(--live);
+}
+
+.pip[data-tone="pending"] {
+  background: var(--pending);
+}
+
+.pip[data-tone="critical"] {
+  background: var(--critical);
+}
+
+.callout {
+  position: absolute;
+  top: 12px;
+  right: calc(100% + 10px);
+  display: grid;
+  gap: 2px;
+  width: max-content;
+  max-width: 260px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--surface-3);
+  box-shadow: var(--shadow-float);
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  pointer-events: none;
+}
+
+.callout::after {
+  content: "";
+  position: absolute;
+  top: 18px;
+  right: -5px;
+  width: 10px;
+  height: 10px;
+  background: var(--surface-3);
+  transform: rotate(45deg);
+  box-shadow: 1px -1px 0 var(--line-strong);
+}
+
+.calloutMode {
+  color: var(--signal);
+  font-weight: 650;
+}
+
+.calloutCamera {
+  color: var(--text-1);
+  font-weight: 560;
+  font-size: var(--fs-body);
+}
+
+/* ---- Panel ------------------------------------------------------------------- */
+.panel {
+  position: fixed;
+  z-index: var(--z-panel);
+  top: var(--topbar-h);
+  right: var(--rail-w);
+  bottom: 0;
+  width: min(var(--workspace-w), 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  box-shadow:
+    -1px 0 0 var(--line-strong),
+    -24px 0 64px -24px oklch(0% 0 0 / 0.7);
+}
+
+@media (max-width: 767px) {
+  .panel {
+    right: 0;
+    width: 100vw;
+  }
+}
+
+.panelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 20px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panelHeader h2 {
+  font-size: 1.125rem;
+}
+
+.panelHeader p {
+  margin-top: 3px;
+  font-size: var(--fs-caption);
+}
+
+.panelBody {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 16px 20px 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.capacity {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.capacityItem {
+  display: grid;
+  gap: 7px;
+}
+
+.capacityLabel {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: var(--fs-caption);
+  font-weight: 560;
+  color: var(--text-2);
+}
+
+.groups {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.group {
+  border-radius: 14px;
+  background: var(--surface-2);
+  box-shadow: 0 0 0 1px var(--line);
+  overflow: hidden;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 10px 10px 14px;
+}
+
+.groupTitle {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  font-size: var(--fs-caption);
+}
+
+.groupName {
+  color: var(--text-1);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupTitle .faint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workers {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.worker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 10px 11px 14px;
+  overflow: hidden;
+}
+
+.worker + .worker {
+  border-top: 1px solid var(--line);
+}
+
+.workerMain {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.workerTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workerMode {
+  font-weight: 620;
+}
+
+.workerState {
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  font-weight: 560;
+}
+
+.workerState[data-tone="live"] {
+  color: var(--live);
+}
+
+.workerState[data-tone="pending"] {
+  color: var(--pending);
+}
+
+.workerState[data-tone="critical"] {
+  color: var(--critical);
+}
+
+.workerMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  padding-left: 16px;
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+
+.workerDetail {
+  flex-basis: 100%;
+  color: var(--text-2);
+}
+
+.workerActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.elsewhere {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.elsewhereToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  font-weight: 560;
+}
+
+.elsewhereToggle:hover {
+  color: var(--text-1);
+}
+
+.elsewhereHint {
+  margin: 6px 0 10px;
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+
+.elsewhereList {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.elsewhereList li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px 6px 8px;
+  border-radius: 8px;
+}
+
+.elsewhereList li:hover {
+  background: var(--surface-2);
+}
+
+.elsewhereText {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  font-size: var(--fs-caption);
+}
+
+.elsewhereText strong {
+  font-size: var(--fs-body);
+  font-weight: 580;
+}

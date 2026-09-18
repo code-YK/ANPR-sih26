@@ -1,0 +1,271 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.header h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-body);
+  font-weight: 620;
+}
+
+.count {
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-family: var(--font-data);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 20px;
+  text-align: center;
+}
+
+.headerActions {
+  display: flex;
+  gap: 6px;
+}
+
+.list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 420px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.list[data-variant="sheet"] {
+  max-height: 300px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+button.row:hover {
+  background: var(--surface-2);
+}
+
+.row[data-fresh] {
+  animation: arrive 1.6s var(--ease-out);
+}
+
+@keyframes arrive {
+  0% {
+    background: var(--signal-soft);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.row[data-alert="true"] {
+  box-shadow: inset 2px 0 0 var(--critical);
+}
+
+.thumb {
+  width: 64px;
+  height: 40px;
+  flex: none;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.thumbEmpty,
+.thumbAlert {
+  display: grid;
+  place-items: center;
+  color: var(--text-4);
+}
+
+.thumbEmpty svg,
+.thumbAlert svg {
+  width: 16px;
+  height: 16px;
+}
+
+.thumbAlert {
+  width: 40px;
+  background: var(--critical-soft);
+  color: var(--critical);
+}
+
+.rowMain {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.rowTitle {
+  font-weight: 560;
+  color: var(--text-1);
+}
+
+.rowMeta {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+}
+
+.rowActions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.time {
+  flex: none;
+  font-family: var(--font-data);
+  font-size: var(--fs-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--pending);
+  font-size: var(--fs-caption);
+}
+
+/* ---- Bars ----------------------------------------------------------------- */
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 56px;
+  margin-bottom: 12px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.bar {
+  flex: 1;
+  min-width: 4px;
+  border-radius: 2px 2px 0 0;
+  background: var(--signal);
+  opacity: 0.8;
+}
+
+/* ---- Export menu ---------------------------------------------------------- */
+.menu {
+  position: relative;
+}
+
+.menu summary {
+  list-style: none;
+}
+
+.menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.menuList {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 5;
+  display: grid;
+  min-width: 120px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--surface-3);
+  box-shadow: var(--shadow-pop);
+}
+
+.menuList a {
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: var(--fs-caption);
+  font-weight: 560;
+  color: var(--text-2);
+}
+
+.menuList a:hover {
+  background: var(--surface-4);
+  color: var(--text-1);
+}
+
+/* ---- Detail dialog --------------------------------------------------------- */
+.detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.detailImage {
+  width: 100%;
+  min-height: 180px;
+  max-height: 420px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: var(--video-bg);
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+
+.detailFacts {
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+}
+
+.facts {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  width: 100%;
+}
+
+.facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.facts dt {
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+
+.facts dd {
+  margin: 0;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rowActions {
+    display: none;
+  }
+}
