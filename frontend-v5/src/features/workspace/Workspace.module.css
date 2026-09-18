@@ -421,3 +421,23 @@
   font-size: var(--fs-body);
   font-weight: 580;
 }
+
+/* Hover lift and press feedback: transform only, so it stays off the main
+   thread with live video on screen. Reduced-motion users keep the colour
+   changes above and skip the movement. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .railCamera {
+    transition:
+      background-color var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-out);
+  }
+
+  .railCamera:hover {
+    transform: scale(1.08);
+  }
+
+  .railCamera:active {
+    transform: scale(0.94);
+  }
+}

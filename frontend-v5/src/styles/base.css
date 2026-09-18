@@ -17,7 +17,7 @@ body,
 
 body {
   margin: 0;
-  background: var(--canvas);
+  background: linear-gradient(143deg, var(--canvas) 22%, var(--canvas-end) 75%) var(--canvas);
   color: var(--text-1);
   font-family: var(--font-ui);
   font-size: var(--fs-body);

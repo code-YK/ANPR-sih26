@@ -446,3 +446,25 @@
     font-size: 1.0625rem;
   }
 }
+
+/* Hover lift and press feedback: transform only, so it stays off the main
+   thread with live video on screen. Reduced-motion users keep the colour
+   changes above and skip the movement. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .tab {
+    transition:
+      color var(--dur-fast) var(--ease-out),
+      background-color var(--dur-fast) var(--ease-out),
+      box-shadow var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-out);
+  }
+
+  .tab:hover {
+    transform: translateY(-1px);
+  }
+
+  .tab:active {
+    transform: scale(0.95);
+    transition-duration: var(--dur-instant);
+  }
+}

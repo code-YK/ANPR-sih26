@@ -171,6 +171,22 @@ def _kill(pid: int) -> None:
 
 
 def _alive(pid: int) -> bool:
+    # On Windows os.kill(pid, 0) is not a probe: CPython maps it onto
+    # TerminateProcess, so the old check killed every live publisher (and
+    # mediamtx) and then reported it "already running" -- a re-run of `start`
+    # left the relay dead. Query the process's exit code instead.
+    if os.name == "nt":
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            return bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259  # STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
     try:
         os.kill(pid, 0)
         return True

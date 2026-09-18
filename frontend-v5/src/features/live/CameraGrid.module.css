@@ -103,21 +103,20 @@
   background: var(--video-bg);
   box-shadow: 0 0 0 1px var(--line);
   overflow: hidden;
-  transition: box-shadow var(--dur-fast) var(--ease-out);
+  transition:
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
   content-visibility: auto;
   contain-intrinsic-size: auto 280px;
 }
 
-.tile:hover {
-  box-shadow: 0 0 0 1px var(--line-hover);
+.tile:hover,
+.tile[data-ai="true"]:hover {
+  box-shadow: 0 0 0 2px var(--brand);
 }
 
 .tile[data-ai="true"] {
   box-shadow: 0 0 0 1px var(--signal-line);
-}
-
-.tile[data-ai="true"]:hover {
-  box-shadow: 0 0 0 1px var(--signal);
 }
 
 .tileLink {
@@ -177,8 +176,7 @@
   pointer-events: none;
 }
 
-.idChip,
-.replayChip {
+.idChip {
   display: inline-flex;
   align-items: center;
   height: 22px;
@@ -189,12 +187,6 @@
   font-family: var(--font-data);
   font-size: 0.6875rem;
   font-weight: 500;
-}
-
-.replayChip {
-  font-family: var(--font-ui);
-  font-weight: 560;
-  color: var(--text-3);
 }
 
 .aiChips {
@@ -293,5 +285,24 @@
 @media (hover: none) {
   .open {
     display: none;
+  }
+}
+
+/* Hover lift and press feedback: transform only, so it stays off the main
+   thread with live video on screen. Reduced-motion users keep the colour
+   changes above and skip the movement. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .tile:hover,
+  .tile[data-ai="true"]:hover {
+    z-index: 1;
+    transform: translateY(-4px) scale(1.02);
+    box-shadow:
+      0 0 0 2px var(--brand),
+      0 18px 36px -18px oklch(0% 0 0 / 0.7);
+  }
+
+  .tile:active {
+    transform: scale(0.99);
+    transition-duration: var(--dur-instant);
   }
 }

@@ -1,4 +1,4 @@
-import "@fontsource-variable/mona-sans/standard.css";
+import "@fontsource-variable/ubuntu-sans/standard.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "@fontsource/ibm-plex-mono/600.css";

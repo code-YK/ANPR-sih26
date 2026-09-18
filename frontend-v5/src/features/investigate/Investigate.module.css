@@ -254,3 +254,18 @@
 .playerAnchor {
   scroll-margin-top: calc(var(--topbar-h) + 16px);
 }
+
+/* Hover lift and press feedback: transform only, so it stays off the main
+   thread with live video on screen. Reduced-motion users keep the colour
+   changes above and skip the movement. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .chip {
+    transition:
+      box-shadow var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-out);
+  }
+
+  .chip:hover {
+    transform: translateY(-2px);
+  }
+}

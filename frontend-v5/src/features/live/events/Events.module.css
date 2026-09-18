@@ -269,3 +269,18 @@ button.row:hover {
     display: none;
   }
 }
+
+/* Hover lift and press feedback: transform only, so it stays off the main
+   thread with live video on screen. Reduced-motion users keep the colour
+   changes above and skip the movement. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .row {
+    transition:
+      background-color var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-out);
+  }
+
+  button.row:hover {
+    transform: translateX(3px);
+  }
+}

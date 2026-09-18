@@ -45,10 +45,59 @@
   gap: 8px;
 }
 
+/* Route tabs read as a plain underline strip with an amber mark, so they
+   stay distinct from the pill-shaped filters (ui-segmented) inside a page. */
 .subnav {
-  justify-self: start;
+  justify-self: stretch;
+  gap: 24px;
   max-width: 100%;
+  padding: 0;
   overflow-x: auto;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+}
+
+.subnav :global(.ui-segmented__item) {
+  height: 40px;
+  padding: 0 2px;
+  border-radius: 0;
+  flex: none;
+}
+
+.subnav :global(.ui-segmented__item):hover {
+  background: none;
+}
+
+.subnav :global(.ui-segmented__item)::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--brand);
+  opacity: 0;
+  transform: scaleX(0.5);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
+}
+
+.subnav :global(.ui-segmented__item):hover:not([aria-current="page"])::after {
+  opacity: 0.45;
+  transform: scaleX(0.7);
+}
+
+.subnav :global(.ui-segmented__item)[aria-current="page"] {
+  background: none;
+  box-shadow: none;
+  font-weight: 620;
+}
+
+.subnav :global(.ui-segmented__item)[aria-current="page"]::after {
+  opacity: 1;
+  transform: none;
 }
 
 .count {
@@ -95,4 +144,14 @@
 
 .sectionHeader h2 {
   font-size: 1.125rem;
+}
+
+/* Hover lift and press feedback: transform only, so it stays off the main
+   thread with live video on screen. Reduced-motion users keep the colour
+   changes above and skip the movement. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .subnav :global(.ui-segmented__item):hover,
+  .subnav :global(.ui-segmented__item):active {
+    transform: none;
+  }
 }

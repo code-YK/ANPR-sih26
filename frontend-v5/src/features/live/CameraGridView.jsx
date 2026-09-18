@@ -219,7 +219,6 @@ export default function CameraGridView() {
               active={activeIds.has(camera.camera_id)}
               visible={visibleIds.has(camera.camera_id)}
               workers={workersByCamera.get(camera.camera_id)}
-              relayed={governmentMode?.camera_ids?.includes(camera.camera_id)}
               register={registerTile}
             />
           ))}

@@ -14,6 +14,7 @@ from app import log_stream
 from app.audit_middleware import append_access_audit
 from app.auth_service import AuthContext, ensure_seed_super_admin, get_current_auth
 from app.pipeline import webrtc_relay
+from app.services import government_mode as government_mode_service
 from app.routers import (
     alerts,
     analytics,
@@ -64,6 +65,12 @@ async def lifespan(_app: FastAPI):
         # on any WHEP failure, so every camera stays previewable either way.
         logging.getLogger("sentinel.webrtc_relay").warning(
             "mediamtx unavailable, WebRTC preview disabled for this process: %s", exc
+        )
+    try:
+        await government_mode_service.repair_on_startup()
+    except Exception as exc:  # never block startup on the recorded-footage relay
+        logging.getLogger("sentinel.government_mode").warning(
+            "Government mode could not be repaired at startup; toggle it in Admin > System: %s", exc
         )
     supervisor_task = asyncio.create_task(analytics.supervisor_loop())
     ingest_supervisor_task = asyncio.create_task(investigate.ingest_supervisor_loop())

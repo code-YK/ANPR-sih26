@@ -1,14 +1,15 @@
 /*
- * Sentinel v5 design tokens -- "Dusk".
+ * Sentinel v5 design tokens -- "Dusk", warmed toward Kattis.
  *
- * A soft slate interface: the chrome stays quiet and low-chroma so colour on
- * screen always means something -- the detector's own box colours, urgency,
- * or the one periwinkle "signal" used for AI activity and the primary action.
+ * Deep near-neutral page, brighter flat cards on top, and one amber brand
+ * finish (the top stripe, the active nav and tab marks). Colour on screen
+ * still means something: the periwinkle signal for AI activity and the
+ * primary action, and the urgency hues below. Amber is chrome only -- it is
+ * never a state.
  *
- * Colour is OKLCH. Neutrals are one hue at chroma <= 0.016 with lightness
- * stepping evenly; nothing is pure black, and video wells sit darker than the
- * page so footage reads as a screen. Accents share a moderate chroma (~0.1)
- * rather than maxing it, which is what keeps them soft instead of neon.
+ * Colour is OKLCH. Neutrals share hue 285 at chroma <= 0.01 (a faint violet
+ * cast, like the Kattis greys) with lightness stepping evenly; video wells sit
+ * darker than the page so footage reads as a screen.
  *
  * Every value is in the sRGB gamut, and every text/fill pair below was checked
  * for WCAG AA (ratios noted against surface-1 unless stated).
@@ -16,31 +17,40 @@
 :root {
   color-scheme: dark;
 
-  /* ---- Neutrals: soft slate ------------------------------------------------ */
-  --hue: 255;
-  --canvas: oklch(21.5% 0.012 var(--hue));    /* #161a1f */
-  --video-bg: oklch(16.5% 0.01 var(--hue));   /* #0b0f13 */
-  --surface-1: oklch(24% 0.013 var(--hue));   /* #1b2025 */
-  --surface-2: oklch(26.8% 0.014 var(--hue)); /* #21262d */
-  --surface-3: oklch(30% 0.015 var(--hue));   /* #292e35 */
-  --surface-4: oklch(34% 0.016 var(--hue));   /* #323840 */
-  --line: oklch(90% 0.02 var(--hue) / 0.075);
-  --line-strong: oklch(90% 0.02 var(--hue) / 0.13);
-  --line-hover: oklch(90% 0.02 var(--hue) / 0.22);
-  --highlight: inset 0 1px 0 oklch(100% 0 0 / 0.035);
+  /* ---- Neutrals ------------------------------------------------------------ */
+  --hue: 285;
+  --canvas: oklch(18.5% 0.005 var(--hue));    /* #121215 */
+  --canvas-end: oklch(20.5% 0.004 var(--hue));/* #171719, page gradient end */
+  --video-bg: oklch(14.5% 0.004 var(--hue));  /* #0a0a0c */
+  --surface-1: oklch(27.5% 0.006 var(--hue)); /* #27272b cards, tables */
+  --surface-2: oklch(30.5% 0.007 var(--hue)); /* #2f2f33 */
+  --surface-3: oklch(34% 0.008 var(--hue));   /* #37373c */
+  --surface-4: oklch(38.5% 0.009 var(--hue)); /* #434348 */
+  --line: oklch(90% 0.01 var(--hue) / 0.07);
+  --line-strong: oklch(90% 0.01 var(--hue) / 0.12);
+  --line-hover: oklch(90% 0.01 var(--hue) / 0.2);
+  --highlight: inset 0 1px 0 oklch(100% 0 0 / 0.04);
 
-  --text-1: oklch(94.5% 0.007 var(--hue));  /* 14:1 */
-  --text-2: oklch(80% 0.012 var(--hue));    /* 7.3:1 on surface-3 */
-  --text-3: oklch(69% 0.014 var(--hue));    /* 5.9:1; 4.9:1 on surface-3 */
-  --text-4: oklch(55% 0.014 var(--hue));    /* disabled and decorative only */
+  --text-1: oklch(94.5% 0.004 var(--hue));  /* 12.6:1 */
+  --text-2: oklch(80.5% 0.008 var(--hue));  /* 8.1:1; 6.4:1 on surface-3 */
+  --text-3: oklch(71.5% 0.01 var(--hue));   /* 5.8:1; 4.6:1 on surface-3 */
+  --text-4: oklch(56% 0.01 var(--hue));     /* disabled and decorative only */
 
-  /* ---- Signal: AI activity, primary action, selection ------------------- */
-  --signal: oklch(78% 0.1 268);             /* 8.2:1 */
-  --signal-fill: oklch(55.5% 0.125 268);    /* white text 4.7:1 */
-  --signal-fill-hover: oklch(59.5% 0.125 268);
-  --signal-soft: oklch(72% 0.1 268 / 0.15);
-  --signal-line: oklch(74% 0.1 268 / 0.4);
-  --on-signal: oklch(99% 0.004 268);
+  /* ---- Brand finish: amber, chrome only --------------------------------- */
+  --brand: oklch(80.5% 0.145 76);           /* #f4b142, 7.9:1 */
+  --brand-soft: oklch(80.5% 0.145 76 / 0.14);
+
+  /* ---- Signal: AI activity, primary action, links ----------------------- */
+  --signal: oklch(77% 0.1 262);             /* #91b5f4, 7.1:1 */
+  --signal-fill: oklch(53.5% 0.13 265);     /* white text 5.3:1 */
+  --signal-fill-hover: oklch(57.5% 0.13 265);
+  --signal-soft: oklch(72% 0.1 262 / 0.15);
+  --signal-line: oklch(74% 0.1 262 / 0.4);
+  --on-signal: oklch(99% 0.004 265);
+
+  /* ---- Tables: indigo head, as on the Kattis statistics page ------------- */
+  --table-head: oklch(32% 0.058 283);       /* text-1 11:1 */
+  --table-zebra: oklch(100% 0 0 / 0.022);
 
   /* ---- Urgency: the only other hues in the interface --------------------- */
   --live: oklch(81% 0.1 158);               /* sage, 7.9:1 on surface-3 */
@@ -52,8 +62,8 @@
   --critical-soft: oklch(75% 0.125 24 / 0.15);
 
   /* ---- Over video: chips and scrims that must read on any frame --------- */
-  --overlay: oklch(17% 0.012 var(--hue) / 0.76);
-  --overlay-strong: oklch(15% 0.012 var(--hue) / 0.86);
+  --overlay: oklch(17% 0.005 var(--hue) / 0.76);
+  --overlay-strong: oklch(15% 0.005 var(--hue) / 0.86);
   --ai-chip-bg: oklch(34% 0.06 268 / 0.9);
   --ai-chip-fg: oklch(93% 0.03 268);        /* 9.6:1 */
 
@@ -72,10 +82,10 @@
   --det-danger: #ff0000;
 
   /* Light enough that the page behind a sheet stays readable. */
-  --scrim: oklch(12% 0.012 var(--hue) / 0.5);
+  --scrim: oklch(12% 0.005 var(--hue) / 0.5);
 
   /* ---- Type -------------------------------------------------------------- */
-  --font-ui: "Mona Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-ui: "Ubuntu Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-data: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
 
   --fs-display: 1.75rem;   /* 28 */

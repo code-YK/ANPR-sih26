@@ -23,7 +23,8 @@
     background-color var(--dur-fast) var(--ease-out),
     border-color var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out),
-    transform var(--dur-instant) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
     opacity var(--dur-fast) var(--ease-out);
 }
 
@@ -125,7 +126,7 @@
   transition:
     background-color var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out),
-    transform var(--dur-instant) var(--ease-out);
+    transform var(--dur-fast) var(--ease-out);
 }
 
 .ui-icon-btn svg {
@@ -590,7 +591,8 @@
   transition:
     color var(--dur-fast) var(--ease-out),
     background-color var(--dur-fast) var(--ease-out),
-    box-shadow var(--dur-fast) var(--ease-out);
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
 }
 
 .ui-segmented__item:hover {
@@ -793,16 +795,14 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 10px 14px;
-  background: var(--surface-1);
-  border-bottom: 1px solid var(--line);
+  padding: 11px 14px;
+  background: var(--table-head);
   text-align: left;
   font-size: var(--fs-overline);
-  font-weight: 600;
-  font-stretch: 92%;
+  font-weight: 650;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: var(--text-3);
+  color: var(--text-1);
   white-space: nowrap;
 }
 
@@ -820,8 +820,17 @@
   transition: background-color var(--dur-fast) var(--ease-out);
 }
 
+.ui-table tbody tr:nth-child(even) {
+  background: var(--table-zebra);
+}
+
 .ui-table tbody tr:hover {
-  background: oklch(100% 0 0 / 0.018);
+  background: oklch(100% 0 0 / 0.055);
+}
+
+/* An amber edge marks the row under the pointer. */
+.ui-table tbody tr:hover > td:first-child {
+  box-shadow: inset 3px 0 0 var(--brand);
 }
 
 .ui-table .ui-table__num {
@@ -946,4 +955,44 @@
 
 .ui-notice--signal svg {
   color: var(--signal);
+}
+
+/* Hover lift and press feedback: transform only, so it stays off the main
+   thread with live video on screen. Reduced-motion users keep the colour
+   changes above and skip the movement. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .ui-btn:hover:not(:disabled) {
+    transform: translateY(-1px) scale(1.03);
+  }
+
+  .ui-btn--primary:hover:not(:disabled) {
+    box-shadow: 0 6px 16px -6px var(--signal-fill);
+  }
+
+  .ui-btn--danger-solid:hover:not(:disabled) {
+    box-shadow: 0 6px 16px -6px var(--critical-fill);
+  }
+
+  .ui-btn:active:not(:disabled) {
+    transform: scale(0.95);
+    transition-duration: var(--dur-instant);
+  }
+
+  .ui-icon-btn:hover:not(:disabled) {
+    transform: scale(1.12);
+  }
+
+  .ui-icon-btn:active:not(:disabled) {
+    transform: scale(0.9);
+    transition-duration: var(--dur-instant);
+  }
+
+  .ui-segmented__item:hover {
+    transform: translateY(-1px);
+  }
+
+  .ui-segmented__item:active {
+    transform: scale(0.95);
+    transition-duration: var(--dur-instant);
+  }
 }

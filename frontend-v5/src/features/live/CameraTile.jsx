@@ -25,7 +25,7 @@ function AiChips({ workers }) {
   );
 }
 
-function CameraTile({ camera, active, visible, workers, relayed, register }) {
+function CameraTile({ camera, active, visible, workers, register }) {
   const [state, setState] = useState("idle");
   const ref = useCallback((element) => register(camera.camera_id, element), [register, camera.camera_id]);
   const previewable = camera.stream_available;
@@ -66,7 +66,6 @@ function CameraTile({ camera, active, visible, workers, relayed, register }) {
         </div>
         <div className={styles.topRow}>
           <span className={styles.idChip}>{camera.camera_id}</span>
-          {relayed && <span className={styles.replayChip}>Replay</span>}
           <AiChips workers={workers} />
         </div>
         <div className={styles.bottom}>

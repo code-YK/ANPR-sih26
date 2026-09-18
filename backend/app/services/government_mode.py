@@ -27,7 +27,9 @@ recorded-streams/_relay/government_mode_state.json (the same gitignored,
 local-runtime-state convention demo_mode_state.json already established).
 """
 
+import asyncio
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -38,6 +40,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth_service import AuthContext, add_audit_event
 from app.config import get_settings
+from app.db import async_session
 from app.models.camera import Camera
 from app.schemas import GovernmentModeStatus
 from app.services import demo_state
@@ -48,6 +51,8 @@ _REPO_ROOT = os.path.dirname(_BACKEND_DIR)
 _RELAY_SCRIPT = os.path.join(_BACKEND_DIR, "scripts", "government_feed_relay.py")
 _RECORDING_DIR = os.path.join(_REPO_ROOT, "recorded-streams")
 _STATE_PATH = os.path.join(_RECORDING_DIR, "_relay", "government_mode_state.json")
+
+logger = logging.getLogger("sentinel.government_mode")
 
 # Must stay identical to government_feed_relay.py's own path_name()/
 # hls_url()/rtsp_url() -- duplicated rather than imported for the same
@@ -205,42 +210,65 @@ def _stop_relay() -> None:
     )
 
 
+async def _repair(session: AsyncSession, state: dict, actor=None) -> list[str]:
+    """Bring an already-enabled mode back to a working state; returns the
+    cameras whose URLs had to be re-pointed.
+
+    The state file surviving does not mean the relay is still alive -- a
+    backend restart, a closed terminal, or a machine sleep can kill the
+    mediamtx/ffmpeg processes while this file just sits there.
+    government_feed_relay.py's cmd_start is idempotent per process (it only
+    (re)starts what is actually dead), so re-running it is cheap when
+    everything is fine and self-healing when it isn't.
+
+    The relay being fine does not mean the DB still points at it either --
+    see _mismatched_cameras -- so any camera that drifted is re-pointed too.
+    """
+    await asyncio.to_thread(_start_relay)
+
+    mismatched = await _mismatched_cameras(session, state)
+    if mismatched:
+        for camera_id, camera in mismatched.items():
+            camera.hls_url = _relay_hls_url(camera_id)
+            camera.rtsp_url = _relay_rtsp_url(camera_id)
+            session.add(camera)
+        add_audit_event(
+            session,
+            actor=actor,
+            actor_email=None if actor else "system",
+            action="government_mode.repaired",
+            target_type="government_mode",
+            target_id="singleton",
+            result="success",
+            details={"camera_ids": list(mismatched)},
+        )
+        await session.commit()
+    return list(mismatched)
+
+
+async def repair_on_startup() -> None:
+    """Called once at backend startup. If government mode was on when the
+    backend (or the machine) went down, its relay processes are gone while the
+    state file still says enabled, so every camera would hang on connect until
+    someone toggled the mode off and on. Repair it here instead."""
+    state = _load_gov_state()
+    if not state:
+        return
+    async with async_session() as session:
+        repointed = await _repair(session, state)
+    logger.info(
+        "Government mode repaired at startup: relay running for %d camera(s)%s",
+        len(state.get("cameras", {})),
+        f", re-pointed {', '.join(repointed)}" if repointed else "",
+    )
+
+
 async def enable(session: AsyncSession, auth: AuthContext) -> GovernmentModeStatus:
     existing = _load_gov_state()
     if existing:
-        # The state file surviving does not mean the relay is still alive --
-        # a backend restart, a closed terminal, or a machine sleep can kill
-        # the mediamtx/ffmpeg processes while this file just sits there.
-        # _start_relay() -> government_feed_relay.py's own cmd_start is
-        # already idempotent per-process (checks _alive() and only
-        # (re)starts what's actually dead), so re-running it here is cheap
-        # when everything is fine and self-healing when it isn't -- no
-        # separate liveness check needed, and no manual disable/enable
-        # cycle required to recover.
-        _start_relay()
-
-        # The relay process being fine does not mean the DB still points at
-        # it -- see _mismatched_cameras. Re-apply this mode's own URLs to
-        # any camera that drifted, the same write enable() does below for a
-        # fresh activation, so "press the toggle on again" is the recovery
-        # for both a dead relay and a DB-level drift, not just the former.
-        mismatched = await _mismatched_cameras(session, existing)
-        if mismatched:
-            for camera_id, camera in mismatched.items():
-                camera.hls_url = _relay_hls_url(camera_id)
-                camera.rtsp_url = _relay_rtsp_url(camera_id)
-                session.add(camera)
-            add_audit_event(
-                session,
-                actor=auth.user,
-                action="government_mode.repaired",
-                target_type="government_mode",
-                target_id="singleton",
-                result="success",
-                details={"camera_ids": list(mismatched)},
-            )
-            await session.commit()
-
+        # Pressing the toggle on again is the manual recovery for both a dead
+        # relay and a DB-level drift -- see _repair.
+        await _repair(session, existing, auth.user)
         return _status_from_state(existing)
 
     if demo_state.is_active():
