@@ -271,11 +271,37 @@ def touch(camera_id: str) -> None:
         _relays[camera_id].last_active = time.time()
 
 
+async def _has_readers(client: httpx.AsyncClient, camera_id: str) -> bool:
+    """Whether MediaMTX still has a WebRTC session reading this path.
+
+    `last_active` is only bumped by a WHEP offer, so on its own it measures
+    time since a viewer *connected*, not whether one is still watching -- a
+    browser holding a single long session would have its relay reaped out
+    from under it after the idle timeout. MediaMTX's own reader list is the
+    authoritative answer. Any API failure answers False, so an unreachable
+    MediaMTX degrades to the original timeout behaviour rather than keeping
+    relays alive forever.
+    """
+    settings = get_settings()
+    try:
+        resp = await client.get(f"http://127.0.0.1:{settings.mediamtx_api_port}/v3/paths/get/{camera_id}")
+        return resp.status_code == 200 and bool(resp.json().get("readers"))
+    except (httpx.HTTPError, ValueError):
+        return False
+
+
 async def reap_idle_relays() -> None:
     settings = get_settings()
     now = time.time()
-    for camera_id in [cid for cid, h in _relays.items() if now - h.last_active > settings.webrtc_relay_idle_timeout_seconds]:
-        _evict(camera_id, "idle")
+    candidates = [cid for cid, h in _relays.items() if now - h.last_active > settings.webrtc_relay_idle_timeout_seconds]
+    if not candidates:
+        return
+    async with httpx.AsyncClient(timeout=2.0) as client:
+        for camera_id in candidates:
+            if await _has_readers(client, camera_id):
+                touch(camera_id)
+                continue
+            _evict(camera_id, "idle")
 
 
 async def webrtc_supervisor_loop() -> None:

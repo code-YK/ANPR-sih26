@@ -58,14 +58,15 @@ class Settings(BaseSettings):
     max_concurrent_suspicious_workers: int = 3
     # ANPR finetuned mode: the fine-tuned veh5 checkpoint (adds auto_rickshaw;
     # see multi-object-tracking/finetune/v11x_fintune_comparison.md), run
-    # through the exact same worker/pipeline as vehicle mode for evaluation
-    # against production traffic. Mutually exclusive with vehicle mode per
-    # camera (see _apply_operator_update) and deliberately capped at 1 --
-    # this is for testing whether the swap is worth it, not scaled
-    # monitoring, and this build's GPU has documented VRAM limits (see
-    # finetune/decision.md D7) that a second concurrent yolo11x-class worker
-    # would eat into. Override via MAX_CONCURRENT_VEHICLE_FINETUNED_WORKERS.
-    max_concurrent_vehicle_finetuned_workers: int = 1
+    # through the exact same worker/pipeline as vehicle mode. Mutually
+    # exclusive with vehicle mode per camera (see _apply_operator_update).
+    # It is now the ANPR model frontend-v5 runs, so it gets the same
+    # three-worker demo profile as baseline vehicle mode. Same caveat as that
+    # cap: this build's GPU has documented VRAM limits (see
+    # finetune/decision.md D7), so lower it on a smaller machine rather than
+    # treating three concurrent yolo11x-class workers as a promise. Override
+    # via MAX_CONCURRENT_VEHICLE_FINETUNED_WORKERS.
+    max_concurrent_vehicle_finetuned_workers: int = 3
     analytics_open_timeout_seconds: float = 60.0
 
     # Demo authentication. The account identity may be stable, but its secret

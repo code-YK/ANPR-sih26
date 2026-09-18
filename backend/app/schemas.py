@@ -28,6 +28,10 @@ class CameraOut(BaseModel):
     # Analytics can additionally consume RTSP/TCP. This is intentionally a
     # capability flag rather than an endpoint so it cannot leak source URLs.
     analytics_stream_available: bool
+    # Focused preview can be relayed to WHEP/WebRTC from RTSP or HLS. Dropped
+    # by accident in an earlier merge, which silently pinned every focused
+    # player to the HLS fallback; docs/api.md always documented it.
+    webrtc_preview_available: bool
 
     codec: str | None
     width: int | None

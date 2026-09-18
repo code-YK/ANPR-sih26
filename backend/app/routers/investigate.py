@@ -831,7 +831,10 @@ async def get_track_thumb(
     path = Path(get_settings().recordings_dir) / track.thumb_path
     if not path.exists():
         raise HTTPException(status_code=404, detail="Thumbnail missing on disk")
-    return FileResponse(path, media_type="image/jpeg")
+    # A track's crop never changes. `private` keeps it out of shared caches;
+    # the short max-age spares a results page re-authenticating dozens of
+    # thumbnails every time it re-renders.
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=600"})
 
 
 @router.post("/investigate/runs/{run_id}/tracks/{track_ref}/link", response_model=TrackOut)

@@ -33,6 +33,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth_service import AuthContext, add_audit_event
@@ -157,13 +158,14 @@ async def _mismatched_cameras(session: AsyncSession, state: dict) -> dict[str, C
     fixture blanked all 16 cameras' URLs while the state file still said
     enabled -- the Live view kept showing "connected" tiles with nothing to
     play."""
-    mismatched: dict[str, Camera] = {}
-    for camera_id in state.get("cameras", {}):
-        camera = await session.get(Camera, camera_id)
-        if camera is None or camera.hls_url != _relay_hls_url(camera_id):
-            if camera is not None:
-                mismatched[camera_id] = camera
-    return mismatched
+    camera_ids = list(state.get("cameras", {}))
+    if not camera_ids:
+        return {}
+    # One query for all owned cameras, not one per camera: this runs on every
+    # status read, which the console polls, and sixteen sequential round trips
+    # to a remote database took well over a second.
+    rows = (await session.execute(select(Camera).where(Camera.camera_id.in_(camera_ids)))).scalars().all()
+    return {camera.camera_id: camera for camera in rows if camera.hls_url != _relay_hls_url(camera.camera_id)}
 
 
 async def get_status(session: AsyncSession | None = None) -> GovernmentModeStatus:

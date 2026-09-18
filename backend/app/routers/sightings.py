@@ -192,7 +192,8 @@ async def get_sighting_evidence(
     path = Path(get_settings().evidence_dir) / sighting.evidence_path
     if not path.exists():
         raise HTTPException(status_code=404, detail="Evidence image has expired and is no longer on disk")
-    return FileResponse(path, media_type="image/jpeg")
+    # Immutable per sighting; see get_track_thumb for the cache reasoning.
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=600"})
 
 
 @router.get("/vehicles/{plate}/journey", response_model=VehicleJourney)

@@ -8,6 +8,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import log_stream
 from app.audit_middleware import append_access_audit
@@ -108,6 +109,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173", "http://127.0.0.1:5173",  # frontend-v2 dev server
         "http://localhost:5174", "http://127.0.0.1:5174",  # frontend-v3 dev server (fixed port, see its vite.config.js)
+        "http://localhost:5175", "http://127.0.0.1:5175",  # frontend-v5 dev server (fixed port, see its vite.config.js)
         "http://localhost:8000", "http://127.0.0.1:8000",
     ],
     allow_credentials=True,
@@ -155,17 +157,46 @@ async def protected_docs(_auth: AuthContext = Depends(get_current_auth)):
 
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-_REACT_DIST_DIR = os.path.join(_REPO_ROOT, "frontend-v3", "dist")
+# frontend-v5 is the console replacing v3. Its build is served whenever it
+# exists; until it has been built, v3's build keeps the root working.
+_REACT_DIST_DIR = next(
+    (
+        path
+        for path in (
+            os.path.join(_REPO_ROOT, "frontend-v5", "dist"),
+            os.path.join(_REPO_ROOT, "frontend-v3", "dist"),
+        )
+        if os.path.isdir(path)
+    ),
+    os.path.join(_REPO_ROOT, "frontend-v3", "dist"),
+)
 
 # Static assets are public so the login page can load; all data/media APIs
 # called by the React application enforce authentication. The old vanilla UI
 # is deliberately not mounted because it has no login flow and would present
 # a misleading unauthenticated application shell.
 #
-# frontend-v3 is the served console: it is a strict superset of frontend-v2
-# (every view, context and hook, plus a loading screen and GSAP reveals), so
-# serving it loses nothing. frontend-v2 stays in the tree as the migration
-# reference its own README describes, and keeps its dev-server CORS entry
-# above so it can still be run side by side on port 5173.
+# frontend-v5 is the served console once built (see _REACT_DIST_DIR above);
+# frontend-v3 and frontend-v2 stay in the tree as references and keep their
+# dev-server CORS entries so they can still be run side by side.
+
+
+class _SpaStaticFiles(StaticFiles):
+    """Serve index.html for client-side routes (e.g. /cameras/cam11) so a
+    reload or a shared deep link opens the app instead of a bare 404. API
+    paths are registered as routes before this mount and never reach it; an
+    unknown /api path still 404s rather than returning the app shell."""
+
+    async def get_response(self, path, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            # A missing file (anything with an extension, e.g. a stale
+            # hashed asset) must stay a 404, not silently become HTML.
+            if exc.status_code != 404 or path.startswith("api") or "." in path.rsplit("/", 1)[-1]:
+                raise
+            return await super().get_response("index.html", scope)
+
+
 if os.path.isdir(_REACT_DIST_DIR):
-    app.mount("/", StaticFiles(directory=_REACT_DIST_DIR, html=True), name="frontend")
+    app.mount("/", _SpaStaticFiles(directory=_REACT_DIST_DIR, html=True), name="frontend")

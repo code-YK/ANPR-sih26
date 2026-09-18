@@ -14,8 +14,8 @@ by independent per-mode caps (MAX_CONCURRENT_VEHICLE_WORKERS,
 MAX_CONCURRENT_VEHICLE_FINETUNED_WORKERS, MAX_CONCURRENT_PERSON_WORKERS)
 rather than by a scheduler. The vehicle cap is a bounded deployment setting
 (the local demo profile is three); reduce or raise it only from measured
-GPU, decoder, and gateway headroom. The finetuned cap defaults to 1 --
-deliberately low, see _reconcile_mode and finetune/decision.md D7.
+GPU, decoder, and gateway headroom. The finetuned cap uses the same
+three-worker demo profile (see config.py and finetune/decision.md D7).
 
 Auto-start (build spec §2.4): every camera with `analytics_enabled=true` is
 scheduled for a "vehicle" (ANPR) worker, and every camera with
@@ -131,10 +131,12 @@ _TRACKER_CONFIG = {
 }
 # The fine-tuned veh5 checkpoint (adds auto_rickshaw; see
 # multi-object-tracking/finetune/v11x_fintune_comparison.md). Relative to
-# _WORKER_DIR, matching how the worker resolves --model. Kept as one named
-# constant rather than inlined so there is exactly one place to update if a
-# later fine-tuning round produces a new checkpoint.
-_FINETUNED_VEHICLE_MODEL = "finetune/weights/yolo11x-veh5-960-20260913-232921_best.pt"
+# _WORKER_DIR, matching how the worker resolves --model -- it now sits next to
+# yolo11x.pt at the top of multi-object-tracking/ rather than under the
+# gitignored finetune/weights/ training output. Kept as one named constant
+# rather than inlined so there is exactly one place to update if a later
+# fine-tuning round produces a new checkpoint.
+_FINETUNED_VEHICLE_MODEL = "yolo11x-veh5-960-20260913-232921_best.pt"
 _DEFAULT_MODEL = {
     "vehicle": "yolo11x.pt",
     "vehicle_finetuned": _FINETUNED_VEHICLE_MODEL,
@@ -166,10 +168,11 @@ _DEFAULT_MODEL = {
 SUPERVISOR_INTERVAL_SECONDS = 10.0
 
 # MJPEG detector stream (see analytics_stream). Polls the published snapshot
-# a little faster than the worker writes it (10/s) so no frame waits on this
-# loop, and gives up well after the worker's own stall tolerance so a
+# faster than the worker writes it (up to 25/s, see worker_telemetry.py) so
+# no frame waits on this loop -- a stat() per tick is all an unchanged file
+# costs -- and gives up well after the worker's own stall tolerance so a
 # briefly-stalled stream doesn't tear the viewer's connection down.
-_STREAM_POLL_SECONDS = 0.05
+_STREAM_POLL_SECONDS = 0.015
 _STREAM_IDLE_TIMEOUT_SECONDS = 30.0
 
 # Ordered camera_ids the supervisor wants running in "vehicle" mode, refreshed
@@ -791,7 +794,10 @@ async def analytics_stream(
                 mtime = snapshot_path.stat().st_mtime
                 if mtime != last_mtime:
                     last_mtime = mtime
-                    payload = snapshot_path.read_bytes()
+                    # Off the event loop: on Windows a file read can stall for
+                    # milliseconds (antivirus scanning a file rewritten many
+                    # times a second), and every other request waits behind it.
+                    payload = await asyncio.to_thread(snapshot_path.read_bytes)
                     idle_since = time.monotonic()
                     yield (b"--frame\r\nContent-Type: image/jpeg\r\n"
                            b"Content-Length: " + str(len(payload)).encode() + b"\r\n\r\n"

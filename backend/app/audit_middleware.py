@@ -5,10 +5,15 @@ middleware supplies the missing access trail without logging raw URLs or query
 values, which may contain sensitive identifiers.
 """
 
+import asyncio
+import logging
+
 from fastapi import Request
 
 from app.auth_service import AuthContext, add_audit_event
 from app.db import async_session
+
+logger = logging.getLogger("sentinel.audit")
 
 # These authenticated paths can be requested many times per second by a video
 # player or polling UI. Auditing every segment/frame would turn audit storage
@@ -37,8 +42,36 @@ def _is_high_frequency_media_path(path: str) -> bool:
     return path.startswith(_HIGH_FREQUENCY_PREFIXES[:4])
 
 
+_pending_writes: set[asyncio.Task] = set()
+
+
+async def _write_audit_event(actor, action: str, target_id: str, result: str, details: dict) -> None:
+    try:
+        async with async_session() as session:
+            add_audit_event(
+                session,
+                actor=actor,
+                action=action,
+                target_type="api_route",
+                target_id=target_id,
+                result=result,
+                details=details,
+            )
+            await session.commit()
+    except Exception:  # noqa: BLE001 - a failed audit write is logged, never raised into a finished request
+        logger.exception("Failed to record %s audit event for %s", action, target_id)
+
+
 async def append_access_audit(request: Request, status_code: int) -> None:
-    """Record one safe metadata-read or authorisation-denial audit event."""
+    """Record one safe metadata-read or authorisation-denial audit event.
+
+    The decision (what to record) is made here, synchronously; the database
+    write itself runs as a task after the response is on its way. Awaiting it
+    inline added a full session round trip -- ~0.3-0.4 s against the remote
+    database -- to every authenticated GET, including the console's polls,
+    which is most of what made the UI feel slow. Every event is still written;
+    only its latency moved out of the request.
+    """
     path = request.url.path
     if not path.startswith("/api/"):
         return
@@ -59,14 +92,8 @@ async def append_access_audit(request: Request, status_code: int) -> None:
         details = {"method": request.method, "status_code": status_code}
     else:
         return
-    async with async_session() as session:
-        add_audit_event(
-            session,
-            actor=auth.user,
-            action=action,
-            target_type="api_route",
-            target_id=_route_pattern(request),
-            result=result,
-            details=details,
-        )
-        await session.commit()
+    task = asyncio.create_task(_write_audit_event(auth.user, action, _route_pattern(request), result, details))
+    # Hold a reference until it finishes; a bare create_task can be garbage
+    # collected mid-flight.
+    _pending_writes.add(task)
+    task.add_done_callback(_pending_writes.discard)
