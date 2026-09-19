@@ -1,0 +1,180 @@
+.dock {
+  position: fixed;
+  z-index: var(--z-logs);
+  right: calc(var(--rail-w) + 16px);
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.dock > * {
+  pointer-events: auto;
+}
+
+.fab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  font-weight: 560;
+  box-shadow: var(--shadow-pop);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.fab svg {
+  width: 16px;
+  height: 16px;
+}
+
+.fab:hover,
+.fab[aria-expanded="true"] {
+  background: var(--surface-4);
+  color: var(--text-1);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, calc(100vw - var(--rail-w) - 32px));
+  height: min(440px, calc(100dvh - var(--topbar-h) - 90px));
+  border-radius: 14px;
+  background: var(--surface-2);
+  box-shadow: var(--shadow-float);
+  overflow: hidden;
+  transform-origin: bottom right;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.status {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+
+.status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-4);
+}
+
+.status[data-on]::before {
+  background: var(--live);
+}
+
+.body {
+  flex: 1;
+  padding: 8px 4px 10px;
+  overflow: auto;
+  font-family: var(--font-data);
+  font-size: 0.71875rem;
+  line-height: 1.55;
+}
+
+.empty {
+  padding: 12px;
+  color: var(--text-3);
+  font-family: var(--font-ui);
+  font-size: var(--fs-caption);
+}
+
+.line {
+  display: flex;
+  gap: 10px;
+  padding: 1px 10px;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.line:hover {
+  background: var(--surface-3);
+}
+
+.line[data-tone="critical"] {
+  color: var(--critical);
+}
+
+.line[data-tone="pending"] {
+  color: var(--pending);
+}
+
+.line[data-tone="live"] .tag:first-of-type {
+  color: var(--live);
+}
+
+.ts {
+  flex: none;
+  color: var(--text-4);
+}
+
+.tag {
+  flex: none;
+  min-width: 42px;
+  font-weight: 500;
+}
+
+.msg {
+  flex: 1;
+  min-width: 0;
+}
+
+.dim {
+  color: var(--text-3);
+}
+
+.err {
+  color: var(--critical);
+}
+
+@media (max-width: 767px) {
+  .dock {
+    right: 12px;
+    bottom: 12px;
+  }
+  .fab {
+    height: 36px;
+  }
+}
+
+/* Hover lift and press feedback: transform only, so it stays off the main
+   thread with live video on screen. Reduced-motion users keep the colour
+   changes above and skip the movement. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .fab {
+    transition:
+      background-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-out);
+  }
+
+  .fab:hover {
+    transform: translateY(-2px) scale(1.04);
+  }
+
+  .fab:active {
+    transform: scale(0.96);
+  }
+}

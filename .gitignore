@@ -97,6 +97,8 @@ backend/evidence/
 # Logs (operational output, not source)
 *.log
 logs/
+# ...but this one is source code (the console's Logs panel), not log output.
+!frontend-v5/src/features/logs/
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
