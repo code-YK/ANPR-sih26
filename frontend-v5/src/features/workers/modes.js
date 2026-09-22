@@ -23,6 +23,8 @@ export const MODES = {
       { label: "Bus", color: "var(--det-bus)" },
       { label: "Truck", color: "var(--det-truck)" },
       { label: "Auto-rickshaw", color: "var(--det-auto)" },
+      { label: "Confirmed plate", color: "var(--det-plate-confirmed)" },
+      { label: "Reading (?)", color: "var(--det-plate-reading)" },
     ],
   },
   person: {

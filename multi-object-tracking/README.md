@@ -135,6 +135,66 @@ The vehicle worker performs detection, tracking, and corroborated plate
 reading. It reports only confirmed plates to `POST /api/sightings`; a matching
 active watchlist entry can then create an alert.
 
+### How a plate is read and confirmed
+
+1. **Size gate.** Vehicles too small to carry a readable plate are skipped
+   before the plate detector runs. A plate box narrower than
+   `--min-plate-width` (100 px) is never sent to OCR — except a **two-row**
+   plate (two-wheelers, autos), which is read down to
+   `--min-plate-width-two-row` (55 px) because its characters are about twice
+   as tall at the same width. Two-wheelers and autos are therefore checked
+   down to the smaller vehicle size; everything else keeps the 100 px gate.
+   These numbers come from a sweep over recorded footage: lowering the
+   single-row gate to 90/80/70/60 px added no correct plate, only cost and
+   wrong reads, while the two-row gate recovered legible 60 px auto plates.
+2. **Padded OCR crop.** OCR reads the plate box grown by 8% on every side,
+   cut from the full frame. The detector's box is tight and often clips the
+   first or last character, and a truncated read can still look like a valid
+   plate.
+3. **Grammar, as read.** A read can vote only if it is a valid Indian plate
+   exactly as OCR produced it; no character is coerced to fit:
+
+   | Layout | Example |
+   |---|---|
+   | State, 2-digit district, 0–3 series letters, 4 digits | `UP14FS3664`, `GJ21W3884` |
+   | Delhi: `DL`, 1–2 digit district, category letter (+ series), 4 digits | `DL2CBB4791`, `DL7CZ1908`, `DL10CN7685` |
+   | Bharat series: year, `BH`, 4 digits, 1–2 letters | `22BH1234AA` |
+
+   The state code must be a real state/UT code. Series letters never use
+   I or O. Delhi's category letter must be one Delhi issues.
+4. **Multi-frame vote.** A plate is **confirmed** when at least
+   `--plate-votes` (3) independent frames agree:
+   - first on the plate's length, then on every character, each by at least
+     75% of the vote, where each read is weighted by OCR confidence,
+     sharpness and plate width;
+   - the result must be a string OCR actually read;
+   - reads below `--min-plate-conf` (0.55) don't vote;
+   - one read counts per frame, and byte-identical crops count once.
+
+   Anything short of that stays **tentative**: it is shown with a `?` in the
+   detector view and in Investigate, and is never reported as a sighting.
+
+### What the detector view shows
+
+Each read is drawn at the plate itself, on the snapshot the console displays:
+
+- the plate's own box is outlined, so the number is attributable to a plate
+  rather than to a vehicle;
+- a **green** chip is a confirmed plate; an **amber** chip ending in `?` is a
+  tentative or partial read, drawn smaller and softer, and never recorded as
+  a sighting;
+- the chip is sized from its plate and sits just above it, so a distant
+  vehicle gets a small label on its own bodywork rather than a large one over
+  its neighbours; a read under 26 px on screen keeps its box but gets no
+  label, since it would be illegible;
+- labels are drawn after the snapshot is scaled down, so they stay the same
+  readable size on any camera resolution.
+
+A camera whose plates never confirm (too small, too blurred) therefore still
+shows what OCR is reading, instead of looking like nothing is happening. The
+worker also publishes `plates_reading` — vehicles being read right now but not
+confirmed — which both consoles show next to the confirmed count.
+
 ### Stream transport and timestamp behaviour
 
 **RTSP/TCP inference with HLS fallback:**

@@ -79,7 +79,7 @@ const TrackGrid = memo(function TrackGrid({ tracks, recording, activeRef, onPlay
               {track.plate_confirmed ? (
                 <PlateChip plate={track.plate_confirmed} />
               ) : track.plate_tentative ? (
-                <PlateChip plate={`${track.plate_tentative}?`} title="Corroborated but needed a character repair to fit the plate format — not confirmed" />
+                <PlateChip plate={`${track.plate_tentative}?`} title="Best read for this vehicle, not confirmed — fewer than 3 frames agreed on every character" />
               ) : (
                 <span className="faint">{track.kind === "person" ? "Person" : "Plate not read"}</span>
               )}

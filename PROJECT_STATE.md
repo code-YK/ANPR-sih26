@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-09-12 — repository re-scoped from the earlier Gujarat CCTV programme to **SIH 2026 PS SIH26127 (Bharat Electronics Limited)**; government/demo mode toggles ported into `main`; hosted database adopted; Windows platform defects fixed.
+Last updated: 2026-09-22 — plate confirmation reworked (padded OCR crops, per-character multi-frame vote, Delhi/BH plate grammar) and reflected in the backend, `client` and `frontend-v5`. Earlier, 2026-09-12 — repository re-scoped from the earlier Gujarat CCTV programme to **SIH 2026 PS SIH26127 (Bharat Electronics Limited)**; government/demo mode toggles ported into `main`; hosted database adopted; Windows platform defects fixed.
 
 This is the smallest canonical snapshot of the project. Update it in any PR that changes priorities, architecture status, milestone status, or known risks. It must describe **merged reality on `main`**, not unmerged aspirations.
 
@@ -75,7 +75,7 @@ Decision records: [ADR 0001](docs/decisions/0001-integration-shape.md), [ADR 000
 
 | Component | State | Notes |
 |---|---|---|
-| 1. High-Precision OCR Module | In progress | Works and is GPU-accelerated; **>90 % accuracy unmeasured** (`SIH-OCR-002`). A silent CPU-fallback bug costing ~9× was fixed 2026-09-12 |
+| 1. High-Precision OCR Module | In progress | Works and is GPU-accelerated; **>90 % accuracy unmeasured** (`SIH-OCR-002`). A silent CPU-fallback bug costing ~9× was fixed 2026-09-12. Plate confirmation reworked 2026-09-22 (padded OCR crop, per-character vote over ≥3 frames, strict grammar incl. Delhi and BH series, two-row plates read from 55 px): on 60 hand-labelled plates from 9 recorded clips, confirmed-plate precision went from 10/18 (8 false plates) to 22/22 with no speed cost except ~18% on two-wheeler-heavy scenes. That is precision of what gets published, not the >90 % read-accuracy benchmark, and recall stays low on overhead/blurred cameras |
 | 2. Trajectory Reconstruction Engine | In progress | Query → ordered stops → map/timeline → export all work. Direction of travel and implausible-transit flagging are unmerged |
 | 3. City Traffic Analytics Dashboard | **Unmerged** | Density, O–D pairs, congestion baseline, route density, read-yield and a `Traffic` view exist on `new-implementations`; heatmap layer not built; never run against a database |
 | 4. Alert System | In progress | Blacklist alerting verified end to end. **Route-anomaly alerts are not yet raised into the alert queue** |
@@ -96,7 +96,7 @@ Allowed states: `Not started`, `In progress`, `Blocked`, `Unmerged`, `Ready for 
 | The headline >90 % OCR accuracy is unmeasured | **High** | Obtain labelled ground truth and publish precision/recall with an error taxonomy. Never state >90 % without it |
 | Cameras are uncalibrated, so per-camera speed is not derivable | High | Ship corridor lower-bound speed only, label it as such, and state the limitation in the API and the deck |
 | Component 3 is unmerged and unverified against a database | High | Merge early, fix the non-idempotent migration, and exercise every endpoint against the hosted database |
-| Plate misread creates a false cross-camera link | High | Confirmed-vote-only writes, confidence gate for alerts, implausible-transit flagged as a data fault |
+| Plate misread creates a false cross-camera link | High | Confirmed-vote-only writes (≥3 frames agreeing on every character of a plate valid as read), confidence gate for alerts, implausible-transit flagged as a data fault. A misread that repeats identically across frames can still be confirmed; only a better OCR model removes that |
 | Traffic counts mistaken for true volume | Medium | A sighting requires a confirmed plate, so every count is a floor. Publish read-yield alongside every density figure |
 | Recorded demo footage mistaken for a live city deployment | Medium | Government mode is clearly labelled in the console and in this document |
 | Shared credentials have circulated | Medium | Rotate before submission; `.env` is git-ignored and the secret scan is clean |

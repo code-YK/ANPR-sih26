@@ -4,7 +4,8 @@ Headless ANPR observation worker
 Runs vehicle detection+tracking (car_tracking.py) and plate reading (plates.py)
 against one live camera, with no display, and POSTs a sighting to the registry
 backend the first time a track's plate becomes CONFIRMED (plates.PlateReader's
-own corroborated, unrepaired-format-match bar -- see plates.py's docstring).
+multi-frame, per-character vote over reads that are valid as read -- see
+plates.py's docstring).
 
 Deliberately reports only on first confirmation, not every accepted read or
 every frame: PlateVote already does the consensus/voting work, so reporting
@@ -139,19 +140,11 @@ def post_sighting(report_to, payload):
 
 
 def confirmed_confidence(plate_reader, track_id, text):
-    """Average OCR confidence across the reads that contributed to `text`.
-
-    PlateVote.consensus()'s own score is a confidence-weighted, edit-discounted
-    sum across votes (not bounded to [0, 1]), so it is not a meaningful
-    confidence value on its own -- this averages the raw per-read OCR
-    confidences instead, which is what the sightings.confidence column means
-    elsewhere in this registry.
-    """
+    """Average OCR confidence across the reads that produced `text` -- the
+    raw per-read OCR confidence, which is what the sightings.confidence
+    column means elsewhere in this registry (not a vote weight)."""
     vote = plate_reader.votes.get(track_id)
-    if vote is None:
-        return None
-    matching = [conf for t, conf, _w, _e in vote.reads if t == text]
-    return sum(matching) / len(matching) if matching else None
+    return vote.mean_confidence(text) if vote is not None else None
 
 
 def box_to_bbox_and_crop(frame, box):
@@ -291,25 +284,22 @@ def main():
             result = results[0]
             boxes, track_ids, class_ids, confs = tc.unpack_tracks(result)
 
-            plate_reader.read_vehicles(frame, boxes, track_ids, timing.frames, args.plate_every)
+            plate_reader.read_vehicles(frame, boxes, track_ids, timing.frames, args.plate_every,
+                                       class_names=[vehicle_classes.get(c) for c in class_ids])
 
-            # Show whatever the plate reader currently believes, marked by
-            # status: a confirmed read is a settled fact, a tentative one is
-            # explicitly suffixed "?" so the detector view can never make an
-            # uncorroborated OCR guess look like an identification.
-            plate_labels = {}
-            for track_id in track_ids:
-                text, _score, _votes = plate_reader.confirmed(track_id)
-                if text is not None:
-                    plate_labels[track_id] = text
-                    continue
-                tentative, _tscore, _tvotes = plate_reader.consensus(track_id)
-                if tentative:
-                    plate_labels[track_id] = f"{tentative}?"
+            # Show whatever the plate reader currently believes, at the plate
+            # itself: a confirmed read is a settled fact; a tentative or
+            # partial one is explicitly suffixed "?" so the detector view can
+            # never make an uncorroborated OCR guess look like an identification.
+            plate_views = {}
+            for box, track_id in zip(boxes, track_ids):
+                view = plate_reader.display(track_id, tc.xywh_to_corners(box))
+                if view is not None:
+                    plate_views[track_id] = view
 
             telemetry.update(
                 frame, boxes, track_ids, class_ids, confs,
-                sublabels=plate_labels,
+                plates=plate_views,
                 extra={
                     "fps": round(timing.infer_fps, 1),
                     "dropped_frames": reader.dropped,
@@ -319,6 +309,11 @@ def main():
                     # "this camera is flaky" from "this camera outruns us".
                     "resyncs": reader.resyncs,
                     "plates_reported": len(reported_tracks),
+                    # Vehicles whose plate is being read right now but has not
+                    # been confirmed: on a camera that never confirms, this is
+                    # the difference between "working on it" and "idle".
+                    "plates_reading": sum(1 for v in plate_views.values()
+                                          if v["text"] and not v["confirmed"]),
                     "alerts_raised": accepted_alerts,
                     "time_anchored": seen_at is not None,
                     "source_transport": reader.transport,

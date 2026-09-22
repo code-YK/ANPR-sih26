@@ -45,8 +45,11 @@ multi-object-tracking/ (heavy venv)                    backend/ (light venv)
 ```
 
 One sighting per **confirmed** plate-per-track, not per accepted read or per
-frame: `plates.PlateVote` already does the confidence-weighted voting and
-format-repair work (see `multi-object-tracking/plates.py`'s own docstring).
+frame: `plates.PlateVote` confirms a plate only when at least three
+independent frames agree on its length and on every character, over reads
+that are valid Indian plates exactly as read (see
+`multi-object-tracking/plates.py`'s own docstring for the grammar and the
+vote).
 Reporting every intermediate read would let unvalidated OCR output reach the
 registry as if it were settled fact — the same honesty principle already
 applied to `anpr_viable`, `geocode_confidence`, and `metadata_confidence` in

@@ -68,6 +68,13 @@ export default function DetectorView({ cameraId, mode, restartKey = 0 }) {
         // the view comes back on its own once a worker is running again.
         onError={() => setTimeout(() => setK((n) => n + 1), 2000)}
       />
+      {(mode === "vehicle" || mode === "vehicle_finetuned") && (
+        <p className="hint">
+          Plates are drawn where they sit on the vehicle: a green-bordered plate is
+          confirmed; an amber plate ending in “?” is still being read (tentative or
+          partial) and is never recorded as a sighting.
+        </p>
+      )}
       {telemetry.stale && (
         <p className="hint detector-stale">
           Detector output is {telemetry.age_seconds}s old — the worker may have stopped.
@@ -75,6 +82,9 @@ export default function DetectorView({ cameraId, mode, restartKey = 0 }) {
       )}
       <dl className="detector-stats">
         <div><dt>tracked now</dt><dd>{telemetry.tracked_now}</dd></div>
+        {(mode === "vehicle" || mode === "vehicle_finetuned") && (
+          <div><dt>being read</dt><dd>{telemetry.plates_reading ?? "—"}</dd></div>
+        )}
         <div><dt>unique tracks</dt><dd>{telemetry.unique_tracks}</dd></div>
         <div><dt>peak</dt><dd>{telemetry.peak_tracked}</dd></div>
         <div><dt>fps</dt><dd>{telemetry.fps ?? "—"}</dd></div>

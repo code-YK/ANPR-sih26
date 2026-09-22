@@ -314,7 +314,8 @@ export function TelemetryStrip({ modeKey, workerView }) {
     metrics = [
       { label: "In frame", value: n(t?.tracked_now) },
       { label: "Vehicles tracked", value: n(t?.unique_tracks) },
-      { label: "Plates confirmed", value: n(t?.plates_reported), hint: "Plates that passed the confirmation vote and were recorded as sightings." },
+      { label: "Being read", value: n(t?.plates_reading), hint: "Vehicles whose plate is being read right now but has not been confirmed. These appear on the detector view in amber with a \"?\" and are never recorded as sightings." },
+      { label: "Plates confirmed", value: n(t?.plates_reported), hint: "Plates that passed the confirmation vote and were recorded as sightings below." },
       { label: "Watchlist hits", value: n(t?.alerts_raised), tone: t?.alerts_raised ? "critical" : undefined },
     ];
   } else if (modeKey === "person") {

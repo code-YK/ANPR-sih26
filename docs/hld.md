@@ -124,14 +124,17 @@ flowchart LR
     D --> T[ByteTrack<br/>track association]
     T --> G{crop ≥ min width?}
     G -- no --> Skip[skip: too small to read]
-    G -- yes --> P[fast-alpr<br/>plate detect + OCR]
-    P --> V[PlateVote<br/>consensus across frames]
-    V --> C{votes ≥ 2?}
+    G -- yes --> P[fast-alpr<br/>plate detect]
+    P --> O[OCR on the plate box<br/>+8% margin per side]
+    O --> V[PlateVote<br/>per-character vote across frames]
+    V --> C{≥3 frames agree on length<br/>and every character?}
     C -- no --> Tent[tentative — not published]
     C -- yes --> Pub[confirmed → sighting]
 ```
 
 Running on CUDA via ONNX Runtime. A per-vehicle **pre-gate** skips crops too small to read, so GPU time is spent on plates that can actually resolve.
+
+**How a plate is confirmed.** OCR reads the plate box grown by 8% on each side, because the detector's tight box clips edge characters and a truncated read can still look like a valid plate. A plate is read from 100 px of width, or 55 px when it is a two-row plate (two-wheelers, autos), whose characters are twice as tall for the same width. Only reads that are a valid Indian plate *exactly as read* take part. Valid means a known state code and a 2-digit district (Delhi: 1–2 digits and an issued category letter), series letters without I or O, and four digits; Bharat-series `22BH1234AA` is also accepted. A plate is confirmed when at least three independent frames agree, first on its length and then on every character, each by ≥75% of the quality-weighted vote. The winner must be a string OCR actually read. Anything short of that stays tentative and is never published.
 
 **Status:** works; reads real Indian plates at 0.88–1.00 confidence. The problem statement's **>90 % accuracy target is not yet measured** — that requires ground-truth labelled footage covering lighting, weather, angle, blur, and damaged plates. Until that exists, no accuracy figure is claimed.
 

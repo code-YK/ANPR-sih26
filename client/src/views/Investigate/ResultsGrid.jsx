@@ -113,7 +113,7 @@ export default function ResultsGrid({ hits, query, mode = "plate" }) {
                       // never colour. Distinct from the OCR's own
                       // confirmed/tentative read status, shown per-track in
                       // RecordingDetailView -- conflating the two would
-                      // mislabel a fuzzy-matched but zero-edit-confirmed
+                      // mislabel a fuzzy-matched but vote-confirmed
                       // plate as "inferred".
                       <CertaintyMark
                         state={h.match_kind === "exact" ? "confirmed" : "inferred"}

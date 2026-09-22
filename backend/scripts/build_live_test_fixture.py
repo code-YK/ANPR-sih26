@@ -31,7 +31,6 @@ Usage:
 import argparse
 import json
 import os
-import re
 import subprocess
 import sys
 
@@ -39,7 +38,12 @@ from PIL import Image, ImageDraw, ImageFont
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
+sys.path.insert(0, os.path.dirname(_HERE))   # backend/, for app.plate_format
 from make_test_fixture import build_pan_clip  # noqa: E402
+# The backend's copy of the worker's plate grammar (kept in sync with
+# multi-object-tracking/plates.py): a plate that fails it there will never
+# be confirmed no matter how well OCR reads it.
+from app.plate_format import is_valid_indian  # noqa: E402
 
 _REPO_ROOT = os.path.abspath(os.path.join(_HERE, "..", ".."))
 _SURVEY_DIR = os.path.join(_REPO_ROOT, "backend", "survey")
@@ -65,13 +69,6 @@ def _resolve_mot_python() -> str:
 
 
 _MOT_PYTHON = _resolve_mot_python()
-
-# Duplicated from multi-object-tracking/plates.py's INDIAN_PLATE_RE
-# (single-line constant, not worth a cross-venv import of fast_alpr/torch
-# just for a regex): must be kept identical to that one, since a plate
-# that fails it there will never reach `confirmed()` no matter how well
-# OCR reads it.
-INDIAN_PLATE_RE = re.compile(r"^[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{4}$")
 
 # still -> which of the three "same plate, three cameras" role it plays,
 # or "decoy" for the off-watchlist negative control.
@@ -112,12 +109,13 @@ _MIN_PATCH_WIDTH_PX = 130
 
 def validate_plate(plate: str) -> str:
     plate = plate.strip().upper()
-    if not INDIAN_PLATE_RE.match(plate):
+    if not is_valid_indian(plate):
         raise ValueError(
-            f"{plate!r} does not match the Indian plate format "
-            f"{INDIAN_PLATE_RE.pattern!r} (2 letters, 1-2 digits, 0-3 letters, "
-            "4 digits) -- it would never reach PlateVote.confirmed() no matter "
-            "how well OCR reads it. Example valid plate: GJ01TT9911"
+            f"{plate!r} is not a valid Indian plate (known state code, 2-digit "
+            "district -- Delhi 1-2 digits plus a category letter -- 0-3 series "
+            "letters without I or O, 4 digits; or Bharat series 22BH1234AA) -- "
+            "it would never be confirmed no matter how well OCR reads it. "
+            "Example valid plate: GJ01TT9911"
         )
     return plate
 

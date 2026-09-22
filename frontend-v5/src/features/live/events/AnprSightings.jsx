@@ -123,7 +123,7 @@ function AnprSightings({ camera, variant }) {
         </div>
       ) : !rows?.length ? (
         <EmptyState compact icon={<Car />} title="No plates confirmed yet">
-          Plates appear here once the reading vote confirms them, usually a few seconds after a vehicle passes.
+          Plates appear here once three frames agree on every character, usually a few seconds after a vehicle passes. Reads still in progress stay on the detector view above, in amber with a “?”, and are never recorded.
         </EmptyState>
       ) : (
         <ul className={styles.list} data-variant={variant}>

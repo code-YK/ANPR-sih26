@@ -33,8 +33,86 @@ import threading
 import time
 
 import cv2
+import numpy as np
 
 import tracking_common as tc
+
+PLATE_CONFIRMED_BGR = (60, 200, 60)   # green border: a confirmed plate
+PLATE_TENTATIVE_BGR = (0, 170, 255)   # amber border: tentative / partial read ("?")
+
+
+def _overlaps(a, b):
+    return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+
+
+MIN_CHIP_W, MAX_CHIP_W = 58, 230   # output px; a chip is sized from its plate
+READABLE_PLATE_PX = 26             # narrower than this on screen: box only, no chip
+
+
+def draw_plate_chip(img, plate, vehicle_box, scale, taken=None):
+    """Draw a plate read at the plate itself: a plate-like chip sized from the
+    plate box, so a distant vehicle gets a small label and a close one a large
+    label instead of every read shouting equally loudly.
+
+    The chip sits just above the plate -- which is the vehicle's own bodywork,
+    not its neighbours -- and falls back below it, then beside it, when there
+    is no room. A confirmed read is solid white with a green border; a
+    tentative or partial read keeps its trailing "?" and is drawn smaller,
+    softer and amber, so an unsettled read never competes with a confirmed
+    one. Sizes are in output pixels (drawn after the snapshot is resized).
+    `taken` collects chips already placed; overlapping ones step aside.
+    """
+    confirmed = bool(plate.get("confirmed"))
+    border = PLATE_CONFIRMED_BGR if confirmed else PLATE_TENTATIVE_BGR
+    h, w = img.shape[:2]
+    pbox = plate.get("box")
+    if pbox is not None:
+        px1, py1, px2, py2 = (int(v * scale) for v in pbox)
+        cv2.rectangle(img, (px1, py1), (px2, py2), border, 2 if confirmed else 1)
+        plate_w = max(1, px2 - px1)
+        anchor_x, top, bottom = (px1 + px2) // 2, py1, py2
+    else:
+        vx1, vy1, vx2, vy2 = vehicle_box
+        plate_w = max(1, (vx2 - vx1) // 4)
+        anchor_x, top, bottom = (vx1 + vx2) // 2, vy2, vy2
+    if not plate.get("text"):
+        return  # plate located but nothing read yet: the outline alone
+    # A read too small to be legible on screen would be noise; the box still
+    # shows where it is. A confirmed plate is always worth the space.
+    if not confirmed and plate_w < READABLE_PLATE_PX:
+        return
+    text = str(plate["text"])
+    # Size the chip from the plate: near vehicles get a big label, distant
+    # ones a small one, instead of every read being equally loud.
+    target = min(MAX_CHIP_W, max(MIN_CHIP_W, int(plate_w * (1.45 if confirmed else 1.2))))
+    font, pad = cv2.FONT_HERSHEY_DUPLEX, 5
+    unit = cv2.getTextSize(text, font, 1.0, 2)[0][0] or 1
+    font_scale = max(0.42, min(0.95, (target - 2 * pad) / unit))
+    thickness = 2 if font_scale >= 0.66 else 1
+    (tw, th), base = cv2.getTextSize(text, font, font_scale, thickness)
+    cw, ch = tw + 2 * pad, th + base + 2 * pad
+    cx1 = min(max(0, anchor_x - cw // 2), max(0, w - cw))
+    # Above the plate first: that is the vehicle's own bodywork, so a label
+    # rarely lands on the vehicle behind it.
+    slots = [top - ch - 3, bottom + 3, top - 2 * ch - 6, bottom + ch + 6]
+    slots = [y for y in slots if 0 <= y and y + ch <= h] or [max(0, min(h - ch, top - ch - 3))]
+    taken = taken if taken is not None else []
+    cy1 = next((y for y in slots
+                if not any(_overlaps((cx1, y, cx1 + cw, y + ch), t) for t in taken)), slots[0])
+    taken.append((cx1, cy1, cx1 + cw, cy1 + ch))
+    box = (cx1, cy1, cx1 + cw, cy1 + ch)
+    if confirmed:
+        cv2.rectangle(img, box[:2], box[2:], (255, 255, 255), -1)
+        cv2.rectangle(img, box[:2], box[2:], border, 2)
+        ink = (20, 20, 20)
+    else:
+        # Softer: a tentative read should read as provisional at a glance.
+        patch = img[box[1]:box[3], box[0]:box[2]]
+        if patch.size:
+            cv2.addWeighted(np.full_like(patch, 255), 0.82, patch, 0.18, 0, patch)
+        cv2.rectangle(img, box[:2], box[2:], border, 1)
+        ink = (70, 70, 70)
+    cv2.putText(img, text, (cx1 + pad, cy1 + pad + th), font, font_scale, ink, thickness, cv2.LINE_AA)
 
 
 class TelemetryWriter:
@@ -120,14 +198,16 @@ class TelemetryWriter:
     # -- per-frame ---------------------------------------------------------
 
     def update(self, frame, boxes, track_ids, class_ids, confs=None,
-               sublabels=None, extra=None):
+               sublabels=None, extra=None, plates=None):
         """Call once per processed frame, after track(). Cheap on every
         frame: drawing, encoding and file writes run on the publisher
         thread when their timers are due.
 
-        `sublabels` optionally maps track_id -> str (the ANPR worker uses it
-        to show a tentative plate read under the box, clearly marked as
-        tentative rather than confirmed).
+        `sublabels` optionally maps track_id -> str, drawn small under the
+        class label. `plates` (ANPR worker) maps track_id -> dict(text,
+        confirmed, box): the plate read -- confirmed, or tentative/partial
+        with a trailing "?" -- drawn as a large plate chip at the plate's own
+        box (frame coordinates) when known, else under the vehicle.
         """
         self.frames += 1
         self.current_count = len(track_ids)
@@ -143,7 +223,7 @@ class TelemetryWriter:
 
         now = time.time()
         if now - self._last_snapshot >= self.snapshot_every:
-            self._submit_snapshot(frame, boxes, track_ids, class_ids, confs, sublabels)
+            self._submit_snapshot(frame, boxes, track_ids, class_ids, confs, sublabels, plates)
             self._last_snapshot = now
         if now - self._last_status >= self.status_every:
             self.write_status(extra)
@@ -173,7 +253,7 @@ class TelemetryWriter:
 
     # -- publishing --------------------------------------------------------
 
-    def _submit_snapshot(self, frame, boxes, track_ids, class_ids, confs, sublabels):
+    def _submit_snapshot(self, frame, boxes, track_ids, class_ids, confs, sublabels, plates=None):
         """Hand the publisher everything it needs to draw this frame.
 
         Only immutable-by-construction data crosses the thread boundary:
@@ -187,6 +267,7 @@ class TelemetryWriter:
             "class_ids": list(class_ids),
             "confs": list(confs) if confs is not None else None,
             "sublabels": dict(sublabels) if sublabels else None,
+            "plates": {tid: dict(p) for tid, p in plates.items()} if plates else None,
             "trails": {
                 track_id: list(self._trails[track_id])
                 for track_id in track_ids
@@ -229,11 +310,21 @@ class TelemetryWriter:
                 self._atomic_write(self.status_path, status, "w")
 
     def _render_snapshot(self, job):
-        annotated = job["frame"].copy()
+        # Scale down FIRST, then draw: this is a status view shown beside a
+        # live player, not evidence, so it is capped at max_width -- and
+        # drawing after the resize keeps every label a fixed, legible size.
+        # Drawing at native resolution and shrinking afterwards made a plate
+        # read on a 2560-wide camera render at a third of its intended size.
+        frame = job["frame"]
+        h, w = frame.shape[:2]
+        scale = min(1.0, self.max_width / w)
+        annotated = (cv2.resize(frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+                     if scale < 1.0 else frame.copy())
         track_ids = job["track_ids"]
         class_ids = job["class_ids"]
         confs = job["confs"] if job["confs"] is not None else [None] * len(track_ids)
         sublabels = job["sublabels"]
+        plates = job.get("plates") or {}
 
         # Trails first, so boxes and labels stay legible on top of them.
         # Drawn in each track's own class colour so a path is attributable to
@@ -241,24 +332,26 @@ class TelemetryWriter:
         for track_id, cls_id in zip(track_ids, class_ids):
             trail = job["trails"].get(track_id)
             if trail is not None:
-                tc.draw_trail(annotated, trail, self.class_colors.get(cls_id, (0, 200, 255)))
+                tc.draw_trail(annotated, [(x * scale, y * scale) for x, y in trail],
+                              self.class_colors.get(cls_id, (0, 200, 255)))
 
+        chips = []
         for box, track_id, cls_id, conf in zip(job["boxes"], track_ids, class_ids, confs):
-            x1, y1, x2, y2 = tc.xywh_to_corners(box)
+            x1, y1, x2, y2 = (int(v * scale) for v in tc.xywh_to_corners(box))
             color = self.class_colors.get(cls_id, (0, 200, 255))
             name = self.class_names.get(cls_id, "object")
             label = f"{name} #{track_id}" + (f" {conf:.2f}" if conf is not None else "")
             cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
             sub = sublabels.get(track_id) if sublabels else None
             tc.draw_label(annotated, x1, y1, color, label, sub)
-
-        # Scale down before encoding: this is a status view shown beside a
-        # live player, not evidence, and a 2560x1440 JPEG many times a
-        # second is pure waste.
-        h, w = annotated.shape[:2]
-        if w > self.max_width:
-            scale = self.max_width / w
-            annotated = cv2.resize(annotated, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+            plate = plates.get(track_id)
+            if plate and (plate.get("text") or plate.get("box") is not None):
+                chips.append((plate, (x1, y1, x2, y2)))
+        # Plate chips last, so no box or label can cover a plate number;
+        # confirmed plates placed first so a tentative chip moves out of their way.
+        taken = []
+        for plate, vbox in sorted(chips, key=lambda c: (not c[0].get("confirmed"), not c[0].get("text"))):
+            draw_plate_chip(annotated, plate, vbox, scale, taken)
 
         tc.draw_hud(annotated, job["hud"], translucent=True)
 

@@ -89,8 +89,10 @@ def parse_args():
     p.add_argument("--frame-stride", type=int, default=1)
     p.add_argument("--conf", type=float, default=0.1)
     p.add_argument("--plate-every", type=int, default=3)
-    p.add_argument("--min-plate-width", type=int, default=100)
-    p.add_argument("--min-plate-conf", type=float, default=0.80)
+    p.add_argument("--min-plate-width", type=int, default=plates_mod.DEFAULT_MIN_PLATE_WIDTH)
+    p.add_argument("--min-plate-width-two-row", type=int, default=plates_mod.DEFAULT_MIN_PLATE_WIDTH_TWO_ROW)
+    p.add_argument("--min-plate-conf", type=float, default=plates_mod.DEFAULT_MIN_CONF)
+    p.add_argument("--plate-votes", type=int, default=plates_mod.DEFAULT_MIN_VOTES)
     return p.parse_args()
 
 
@@ -432,6 +434,7 @@ def main():
     if args.kind == "vehicle":
         plate_reader = plates_mod.PlateReader(
             device=device, min_plate_width=args.min_plate_width, min_conf=args.min_plate_conf,
+            min_votes=args.plate_votes, min_plate_width_two_row=args.min_plate_width_two_row,
         )
         print(f"[IngestWorker] Plate ONNX providers: {plate_reader.providers()}")
     else:
@@ -482,7 +485,8 @@ def main():
                 active[track_id].maybe_capture_crop(result.orig_img, box_t, conf)
 
             if plate_reader is not None:
-                plate_reader.read_vehicles(result.orig_img, boxes, track_ids, processed, args.plate_every)
+                plate_reader.read_vehicles(result.orig_img, boxes, track_ids, processed, args.plate_every,
+                                           class_names=[model.names.get(int(c)) for c in class_ids])
 
             for track_id in [tid for tid in active if tid not in seen_now]:
                 track = active[track_id]

@@ -1,31 +1,77 @@
 """
-License plate detection, OCR and per-track consensus
-====================================================
-Wraps fast-alpr (MIT) and adds the three things that make plate reading work on
+License plate detection, OCR and per-track confirmation
+=======================================================
+Wraps fast-alpr (MIT) and adds the things that make plate reading work on
 CCTV footage rather than on clean benchmark images:
 
 1. A SIZE GATE. OCR is only attempted on plate crops wide enough to resolve
-   characters. Measured on an approved local representative sample: plates
-   >=110px read at 0.96-1.00 confidence and were correct, while plates <100px
-   read at 0.38-0.65 and were garbage. Running OCR below the gate does not just
-   waste time, it actively pollutes the vote with confident-looking nonsense.
+   characters: 100 px for a single-row plate, 55 px for a two-row plate
+   (two-wheelers, autos), whose characters are about twice as tall at the same
+   width. A threshold sweep over recorded footage (2026-09-22) found that
+   lowering the single-row gate to 90/80/70/60 px added no correct plate, only
+   cost and wrong reads, while the two-row gate recovered legible 60 px auto
+   plates. Vehicles too small to carry a readable plate are skipped before the
+   detector runs; two-wheelers/autos are checked down to the two-row size.
 
-2. PER-TRACK VOTING. A single frame is unreliable; a track is not. The same
-   vehicle produced several one-character variations and truncations across
-   five frames. Accumulating reads per track ID and taking a confidence-weighted
-   vote recovers a stable answer from noisy parts.
+2. PADDED OCR CROPS. The plate detector's box is tight and regularly clips
+   the first or last character; OCR then returns a shorter string that can
+   still look like a valid plate (UP14FS3664 read as UP14F5366, a clipped
+   DL1LA?5612 read as DL1LA0561). OCR therefore runs on the detector box grown
+   by PLATE_PAD on every side, cut from the full frame so the margin is not
+   limited by the vehicle box. Measured on recorded government-mode footage:
+   +37% exactly-right reads on the same plate crops.
 
-3. FORMAT VALIDATION AND REPAIR. Indian plates have a rigid structure, so most
-   OCR errors are provably impossible and the confusable pairs (0/O, 1/I, 6/G,
-   8/B, 5/S) can be resolved by position without another model.
+3. A PER-CHARACTER, MULTI-FRAME VOTE. A single frame is unreliable, and so
+   are two: one systematic misread (same crop geometry, same error every
+   frame) produces two matching reads easily. A track's plate is CONFIRMED
+   only when at least `min_votes` independent frames agree -- first on the
+   plate's length, then on every character position, each by at least
+   VOTE_SHARE of the quality-weighted vote (OCR confidence x sharpness x
+   width) -- and the winner is a string OCR actually produced, never a
+   character-by-character composite. One vote per frame; byte-identical crops
+   (a repeated or stalled frame) count once. Measured end to end on recorded
+   footage against hand-labelled plates (2026-09-22): on clips held out from
+   the design, confirmed plates went from 5 correct + 1 wrong to 8 correct +
+   0 wrong; on the design clips from 5 + 7 wrong to 14 + 0; same speed. It
+   cannot catch a misread that repeats identically in every frame -- that
+   needs a better OCR model, not a better vote.
+
+4. A STRICT INDIAN GRAMMAR, applied to the read AS IS -- no character is ever
+   coerced to make a read fit. A plate is valid when it is one of:
+     * <state><2-digit district><0-3 series letters><4 digits>   UP14FS3664
+     * Delhi: DL<1-2 digit district><1-3 letters><4 digits>       DL2CBB4791,
+       DL7CZ1908, DL10CN7685 (category letter + series)
+     * Bharat series: <2-digit year>BH<4 digits><1-2 letters>     22BH1234AA
+   with a known state/UT code. Only Delhi issues 1-digit district codes, so a
+   1-digit district elsewhere is an OCR slip (HR29BG7381 read as HR2SBG7381),
+   not a plate. Series letters never include I or O, and Delhi's category
+   letter is one of its issued categories, so DL10CN7685 read as DL1OCN7685
+   or DL1DCN7685 is rejected rather than confirmed.
+
+The confusable-pair repair (0/D, 8/B, 5/S...) is still used, but only to
+produce a readable TENTATIVE string for display; it never contributes to a
+confirmation.
 """
 
+import hashlib
 import os
 import platform
 import re
 from collections import defaultdict
+from typing import NamedTuple
 
 import numpy as np
+
+DEFAULT_MIN_PLATE_WIDTH = 100   # px of plate box width before OCR is attempted (single-row plate)
+DEFAULT_MIN_PLATE_WIDTH_TWO_ROW = 55   # px for a two-row plate: its glyphs are ~2x taller
+TWO_ROW_ASPECT = 2.2            # plate box w/h below this = two-row plate (measured: two clusters, gap at ~2.2)
+TWO_ROW_CLASSES = frozenset({"motorcycle", "auto_rickshaw"})   # vehicles checked down to the two-row gate
+DISPLAY_MIN_CHARS = 5           # shorter partial reads are fragments, not information
+DEFAULT_MIN_CONF = 0.55         # per-read OCR confidence needed to vote at all
+DEFAULT_MIN_VOTES = 3           # independent frames that must agree
+PLATE_PAD = 0.08                # OCR crop margin, as a fraction of the plate box, per side
+VOTE_SHARE = 0.75               # share of the weighted vote a length/character must win
+RELATIVE_WIDTH = 0.6            # reads narrower than this x the track's widest do not vote
 
 
 def _resolve_onnx_providers(device):
@@ -94,12 +140,39 @@ def enable_onnx_cuda():
         pass
     return False
 
-# Indian plate: <2 state letters><1-2 district digits><0-3 series letters><4 digits>
-# Synthetic format examples: ZZ00A1234, YY01AB5678, XX9ABC0001
-INDIAN_PLATE_RE = re.compile(r"^[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{4}$")
 
-# OCR confusions, by which direction the fix runs.
-TO_LETTER = {"0": "O", "1": "I", "2": "Z", "4": "A", "5": "S", "6": "G", "8": "B"}
+# --------------------------------------------------------------------------
+# Plate grammar
+# --------------------------------------------------------------------------
+
+# Structural layout shared by every state: <2 letters><1-2 digits><0-3 letters><4 digits>.
+# is_valid_indian() adds the state-code, district and letter rules on top of it.
+INDIAN_PLATE_RE = re.compile(r"^[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{4}$")
+_PLATE_PARTS_RE = re.compile(r"^([A-Z]{2})([0-9]{1,2})([A-Z]{0,3})([0-9]{4})$")
+# Bharat (BH) series: <2-digit registration year>BH<4 digits><1-2 letters>.
+BH_PLATE_RE = re.compile(r"^[0-9]{2}BH[0-9]{4}[A-Z]{1,2}$")
+
+# Series letters never include I or O (they would be confused with 1 and 0),
+# so a read with either in a letter position is an OCR slip, not a plate.
+SERIES_EXCLUDED = frozenset("IO")
+# Delhi's category letter, the first letter after its district code
+# (C cars, S two-wheelers, R autos/radio taxis, L/G trucks, P buses, ...).
+DELHI_CATEGORIES = frozenset("ABCEFGKLMNPQRSTUVWYZ")
+
+# State / union-territory registration codes, including the older codes still
+# on the road (OR -> OD, UA -> UK, TS -> TG; DD and DN before their merger).
+STATE_CODES = frozenset({
+    "AN", "AP", "AR", "AS", "BR", "CG", "CH", "DD", "DL", "DN", "GA", "GJ",
+    "HP", "HR", "JH", "JK", "KA", "KL", "LA", "LD", "MH", "ML", "MN", "MP",
+    "MZ", "NL", "OD", "OR", "PB", "PY", "RJ", "SK", "TG", "TN", "TR", "TS",
+    "UA", "UK", "UP", "WB",
+})
+
+# OCR confusions, by which direction the fix runs (tentative display only).
+# A 0 in a letter position maps to D, not O: O is never issued, and 0/D is the
+# confusion actually seen on these cameras (UP16CD5633 read as UP16C05633).
+# 1 has no letter mapping for the same reason (I is never issued).
+TO_LETTER = {"0": "D", "2": "Z", "4": "A", "5": "S", "6": "G", "8": "B"}
 TO_DIGIT = {"O": "0", "Q": "0", "D": "0", "I": "1", "L": "1", "Z": "2",
             "A": "4", "S": "5", "G": "6", "B": "8", "T": "7"}
 
@@ -107,6 +180,23 @@ TO_DIGIT = {"O": "0", "Q": "0", "D": "0", "I": "1", "L": "1", "Z": "2",
 def normalise(text):
     """Uppercase and strip anything that cannot appear in a plate."""
     return re.sub(r"[^A-Z0-9]", "", (text or "").upper())
+
+
+def is_valid_indian(text):
+    """True when `text`, exactly as read, is a registrable Indian plate."""
+    s = normalise(text)
+    if BH_PLATE_RE.match(s):
+        return not SERIES_EXCLUDED.intersection(s[8:])
+    m = _PLATE_PARTS_RE.match(s)
+    if not m:
+        return False
+    state, district, series, _number = m.groups()
+    if state not in STATE_CODES or SERIES_EXCLUDED.intersection(series):
+        return False
+    if state == "DL":
+        # Delhi: 1-2 digit district, then a category letter (+ series)
+        return len(series) >= 1 and series[0] in DELHI_CATEGORIES
+    return len(district) == 2
 
 
 def _coerce(chars, mapping):
@@ -122,11 +212,13 @@ def _coerce(chars, mapping):
 
 
 def repair_indian(text):
-    """Coerce a noisy read into the Indian plate format.
+    """Coerce a noisy read into a valid Indian plate, for DISPLAY only.
 
     Returns (repaired, edits) or (None, None) when the string cannot plausibly
-    be a plate. `edits` is how many characters had to be changed, which the
-    voter uses to prefer reads that needed less forcing.
+    be a plate. `edits` is how many characters had to be changed. A repaired
+    string is a guess -- it is shown as tentative and never confirmed: a
+    truncated `ZZ00AA123` "repairs" to a valid-looking `ZZ00A4123`, which would
+    be inventing a vehicle.
 
     The structure is anchored at both ends - the first two characters are always
     letters and the last four always digits - so only the district/series split
@@ -134,11 +226,10 @@ def repair_indian(text):
     wins.
     """
     s = normalise(text)
-    if not (8 <= len(s) <= 10):
+    if not (8 <= len(s) <= 11):
         return None, None
 
     best = None
-    # district digits take 1-2 characters; the series letters take the rest.
     for n_district in (1, 2):
         mid_len = len(s) - 2 - 4
         n_series = mid_len - n_district
@@ -152,128 +243,179 @@ def repair_indian(text):
 
         candidate = state + district + series + number
         edits = e1 + e2 + e3 + e4
-        if INDIAN_PLATE_RE.match(candidate) and (best is None or edits < best[1]):
+        if is_valid_indian(candidate) and (best is None or edits < best[1]):
             best = (candidate, edits)
 
     return best if best else (None, None)
 
 
-def is_valid_indian(text):
-    return bool(INDIAN_PLATE_RE.match(normalise(text)))
+# --------------------------------------------------------------------------
+# Per-track vote
+# --------------------------------------------------------------------------
+
+class PlateRead(NamedTuple):
+    text: str          # normalised read, or its display repair when not valid as read
+    confidence: float  # mean per-character OCR confidence
+    width: int         # plate box width in source pixels (unpadded)
+    edits: int         # 0 = valid exactly as read; >0 = repaired for display; 99 = not a plate
+    sharpness: float   # Laplacian variance of the OCR crop
+    frame: object      # frame index the read came from (None when unknown)
 
 
 class PlateVote:
-    """Accumulated plate reads for one track, resolved by weighted consensus."""
+    """Accumulated plate reads for one track, resolved by a per-character vote."""
 
-    __slots__ = ("reads", "best_width")
+    __slots__ = ("reads", "best_width", "_frames", "_fingerprints")
 
     # A live track eventually leaves frame; an offline ingest run can watch
     # one parked vehicle for the whole recording, re-reading it every `every`
-    # frames forever. consensus()/confirmed() are O(len(reads)) and called
-    # every frame per track, so an unbounded list is a real cost on a long
-    # file. Capped by evicting the lowest-confidence read, which is the one
-    # least likely to change consensus() anyway.
-    MAX_READS = 20
+    # frames forever. Capped by evicting the lowest-confidence read, which is
+    # the one least likely to change the vote anyway.
+    MAX_READS = 24
 
     def __init__(self):
-        self.reads = []          # (text, confidence, plate_width, edits)
+        self.reads = []
         self.best_width = 0
+        self._frames = set()
+        self._fingerprints = set()
 
-    def add(self, text, confidence, width):
+    def add(self, text, confidence, width, *, frame=None, sharpness=1.0, fingerprint=None):
+        """Record one read. Returns False when it is not an independent
+        observation (same frame, or byte-identical crop) and was ignored."""
+        if frame is not None:
+            if frame in self._frames:
+                return False
+            self._frames.add(frame)
+        if fingerprint is not None:
+            if fingerprint in self._fingerprints:
+                return False
+            self._fingerprints.add(fingerprint)
         raw = normalise(text)
-        # A read that already matches the format needs no repair at all; that
-        # distinction matters, because only unrepaired reads can be confirmed.
-        if INDIAN_PLATE_RE.match(raw):
-            repaired, edits = raw, 0
+        if is_valid_indian(raw):
+            shown, edits = raw, 0
         else:
             repaired, edits = repair_indian(raw)
-        # Keep the raw read when repair fails: a plate from another state format
-        # would fail the Indian pattern, and discarding it entirely is worse
-        # than reporting it unvalidated.
-        self.reads.append((repaired or raw, confidence, width,
-                           edits if repaired else 99))
-        self.best_width = max(self.best_width, width)
+            # Keep the raw read when repair fails: shown unvalidated beats
+            # discarded, and it can never be confirmed either way.
+            shown, edits = (repaired, edits) if repaired else (raw, 99)
+        self.reads.append(PlateRead(shown, float(confidence), int(width), edits,
+                                    float(sharpness), frame))
+        self.best_width = max(self.best_width, int(width))
         if len(self.reads) > self.MAX_READS:
-            self.reads.remove(min(self.reads, key=lambda r: r[1]))
+            self.reads.remove(min(self.reads, key=lambda r: r.confidence))
+        return True
 
     def min_edits(self, text):
         """Fewest repairs any single read needed to produce `text`."""
-        costs = [e for t, _, _, e in self.reads if t == text]
+        costs = [r.edits for r in self.reads if r.text == text]
         return min(costs) if costs else 99
 
+    def mean_confidence(self, text):
+        """Average OCR confidence of the reads that produced `text`."""
+        matching = [r.confidence for r in self.reads if r.text == text]
+        return sum(matching) / len(matching) if matching else None
+
     def consensus(self):
-        """Return (text, score, n_votes) or (None, 0, 0).
+        """Best-supported string, confirmed or not: (text, score, n_reads).
 
+        For display only (the tentative "?" label, an investigator's hint).
         Votes are weighted by OCR confidence, discounted by how many characters
-        had to be forced to fit the plate format, and given a modest bonus for
-        being format-valid.
-
-        The bonus is deliberately a bonus and not an absolute preference. A hard
-        "any valid read beats any invalid one" rule lets a single mis-repaired
-        read win outright: synthetic `ZZ00AA123` is a truncated read that
-        repairs to the valid-looking `ZZ00A4123` with one edit, and reporting it
-        would be inventing a vehicle. Weighting instead means a wrong repair has
-        to actually out-vote the alternatives.
+        had to be forced to fit the plate format, with a modest bonus for
+        reads that are valid as read.
         """
         if not self.reads:
             return None, 0.0, 0
-
         scores = defaultdict(float)
         counts = defaultdict(int)
-        for text, conf, width, edits in self.reads:
-            if not text:
+        for r in self.reads:
+            if not r.text:
                 continue
-            bonus = 1.5 if is_valid_indian(text) else 1.0
-            scores[text] += conf * bonus / (1.0 + edits)
-            counts[text] += 1
-
+            bonus = 1.5 if r.edits == 0 else 1.0
+            scores[r.text] += r.confidence * bonus / (1.0 + r.edits)
+            counts[r.text] += 1
         if not scores:
             return None, 0.0, 0
-
         best = max(scores, key=scores.get)
         return best, scores[best], counts[best]
 
-    def confirmed(self, min_votes=2):
-        """Consensus corroborated by an UNREPAIRED, format-valid read.
+    def confirmed(self, min_votes=DEFAULT_MIN_VOTES):
+        """The confirmed plate: (text, mean_confidence, n_agreeing_reads), or
+        (None, 0.0, n_voting_reads) while the vote is not settled.
 
-        Requiring zero edits is the important part. Verified against ground
-        truth on an approved representative sample: a synthetic ground-truth
-        label `ZZ00AA1234` was read as `ZZ00AA123` (the OCR truncated the last
-        digit) and then "repaired" into `ZZ00A4123` by flipping A->4. It
-        collected five votes,
-        because the truncation is systematic - the same crop geometry produces
-        the same wrong read every frame - so corroboration alone cannot detect
-        it. Only an exact, unforced format match should ever be reported as a
-        fact; anything that needed coercion stays tentative.
+        Only reads that are valid exactly as read take part. Reads narrower
+        than RELATIVE_WIDTH of the track's widest valid read drop out -- once a
+        vehicle has come close, its distant reads add noise, not evidence. The
+        read length is voted first, so a truncated read can neither out-vote
+        nor co-exist with the full plate; then every character position must
+        win VOTE_SHARE of the quality-weighted vote with support from at least
+        `min_votes` frames; and the winner must be a string that was actually
+        read. Anything short of that abstains.
         """
-        text, score, votes = self.consensus()
-        if (text and is_valid_indian(text) and votes >= min_votes
-                and self.min_edits(text) == 0):
-            return text, score, votes
-        return None, score, votes
+        valid = [r for r in self.reads if r.edits == 0]
+        if len(valid) < min_votes:
+            return None, 0.0, len(valid)
+        wmax = max(r.width for r in valid)
+        valid = [r for r in valid if r.width >= RELATIVE_WIDTH * wmax]
+        if len(valid) < min_votes:
+            return None, 0.0, len(valid)
+        smax = max(r.sharpness for r in valid) or 1.0
+
+        def quality(r):
+            return r.confidence * (0.5 + 0.5 * r.sharpness / smax) * (0.5 + 0.5 * r.width / wmax)
+
+        by_length = defaultdict(float)
+        for r in valid:
+            by_length[len(r.text)] += quality(r)
+        length, weight = max(by_length.items(), key=lambda kv: kv[1])
+        if weight < VOTE_SHARE * sum(by_length.values()):
+            return None, 0.0, len(valid)
+        group = [r for r in valid if len(r.text) == length]
+        if len(group) < min_votes:
+            return None, 0.0, len(valid)
+
+        chars = []
+        for i in range(length):
+            weights, support = defaultdict(float), defaultdict(int)
+            for r in group:
+                weights[r.text[i]] += quality(r)
+                support[r.text[i]] += 1
+            ch, w = max(weights.items(), key=lambda kv: kv[1])
+            if w < VOTE_SHARE * sum(weights.values()) or support[ch] < min_votes:
+                return None, 0.0, len(valid)
+            chars.append(ch)
+        text = "".join(chars)
+        agreeing = [r for r in group if r.text == text]
+        if not agreeing:
+            return None, 0.0, len(valid)
+        return text, sum(r.confidence for r in agreeing) / len(agreeing), len(agreeing)
 
     def best_evidence(self):
         """(raw_text, confidence, width) of this track's single
         highest-confidence read -- for Section 5's evidence-record
-        requirement (raw OCR text, distinct from the normalised/repaired
-        `plate` a sighting reports). "Raw" here means before format-repair,
-        not before normalise() -- reads are stored post-normalise already;
-        capturing the true pre-normalise string would need a second field
-        threaded through read_crop(), deferred as out of scope for what
-        this evidence is actually for (showing an operator what OCR
-        genuinely saw, not exact-byte forensics)."""
+        requirement (raw OCR text, distinct from the confirmed `plate` a
+        sighting reports). "Raw" here means before format-repair, not before
+        normalise() -- reads are stored post-normalise already; capturing the
+        true pre-normalise string would need a second field threaded through
+        read_crop(), deferred as out of scope for what this evidence is
+        actually for (showing an operator what OCR genuinely saw, not
+        exact-byte forensics)."""
         if not self.reads:
             return None, 0.0, 0
-        text, conf, width, _edits = max(self.reads, key=lambda r: r[1])
-        return text, conf, width
+        r = max(self.reads, key=lambda r: r.confidence)
+        return r.text, r.confidence, r.width
 
+
+# --------------------------------------------------------------------------
+# Reader
+# --------------------------------------------------------------------------
 
 class PlateReader:
     """Detect and read plates inside vehicle crops.
 
-    Running on crops rather than whole frames is both faster and more accurate:
-    the plate detector sees a much larger relative target, and the result is
-    already associated with a vehicle track.
+    Detection runs on crops rather than whole frames, which is both faster and
+    more accurate: the plate detector sees a much larger relative target, and
+    the result is already associated with a vehicle track. OCR then reads the
+    plate box padded by PLATE_PAD, cut from the full frame when it is known.
     """
 
     # A plate is at most roughly this fraction of the vehicle's box width - an
@@ -284,7 +426,10 @@ class PlateReader:
 
     def __init__(self, detector_model="yolo-v9-s-608-license-plate-end2end",
                  ocr_model="cct-s-v2-global-model", device="cuda",
-                 min_plate_width=100, min_conf=0.80, min_crop_width=None):
+                 min_plate_width=DEFAULT_MIN_PLATE_WIDTH, min_conf=DEFAULT_MIN_CONF,
+                 min_crop_width=None, min_votes=DEFAULT_MIN_VOTES, pad=PLATE_PAD,
+                 min_plate_width_two_row=DEFAULT_MIN_PLATE_WIDTH_TWO_ROW,
+                 two_row_classes=TWO_ROW_CLASSES):
         is_cuda = device not in ("cpu", "mps")
         if is_cuda:
             enable_onnx_cuda()
@@ -314,12 +459,24 @@ class PlateReader:
         )
         self.min_plate_width = min_plate_width
         self.min_conf = min_conf
+        self.min_votes = min_votes
+        self.pad = pad
         # Derived rather than guessed: a vehicle narrower than this cannot show
         # a plate wide enough to clear min_plate_width, so running the detector
         # on it is guaranteed wasted work.
         self.min_crop_width = (min_crop_width if min_crop_width is not None
                                else int(min_plate_width / self.MAX_PLATE_RATIO))
+        # Two-wheelers and autos carry two-row plates, readable at a smaller
+        # width, so they are checked down to that size (see TWO_ROW_*).
+        self.min_plate_width_two_row = min(min_plate_width_two_row, min_plate_width)
+        self.two_row_classes = frozenset(two_row_classes or ())
+        self.min_crop_width_two_row = min(self.min_crop_width,
+                                          int(self.min_plate_width_two_row / self.MAX_PLATE_RATIO))
         self.votes = defaultdict(PlateVote)
+        # Display only (the detector view): where each track's plate was last
+        # seen, relative to its vehicle box, and its latest read -- including
+        # partial or low-confidence reads that never vote.
+        self.seen = {}
 
         self.skipped = 0       # crops rejected by the size pre-gate
         self.attempted = 0     # crops sent to the plate detector
@@ -341,48 +498,95 @@ class PlateReader:
             return float(np.mean(conf)) if len(conf) else 0.0
         return float(conf)
 
-    def read_crop(self, crop, track_id):
-        """Run detection+OCR on one vehicle crop and record any accepted read.
+    def _ocr_pixels(self, crop, box, frame, origin):
+        """The plate box grown by `pad` per side, from the full frame when known."""
+        x1, y1, x2, y2 = box
+        px, py = int((x2 - x1) * self.pad), int((y2 - y1) * self.pad)
+        if frame is not None:
+            ox, oy = origin
+            fh, fw = frame.shape[:2]
+            return frame[max(0, oy + y1 - py):min(fh, oy + y2 + py),
+                         max(0, ox + x1 - px):min(fw, ox + x2 + px)]
+        ch, cw = crop.shape[:2]
+        return crop[max(0, y1 - py):min(ch, y2 + py), max(0, x1 - px):min(cw, x2 + px)]
 
-        Returns (text, confidence, width) for an accepted read, else None.
+    def read_crop(self, crop, track_id, frame=None, origin=(0, 0), frame_index=None,
+                  two_row_vehicle=False):
+        """Detect and read plates in one vehicle crop; record the best read.
+
+        `frame`/`origin` (the crop's top-left in `frame`) let the OCR margin
+        extend past the vehicle box; `frame_index` makes the vote count one
+        read per frame; `two_row_vehicle` (a two-wheeler/auto) lowers the
+        vehicle pre-gate to the two-row plate size. Returns (text,
+        confidence, width) for an accepted read, else None.
         """
+        import cv2
+
         h, w = crop.shape[:2]
         # A vehicle this small cannot contain a legible plate; skip before the
         # model runs rather than paying for it and rejecting the output.
-        if w < self.min_crop_width or h < 16:
+        if w < (self.min_crop_width_two_row if two_row_vehicle else self.min_crop_width) or h < 16:
             self.skipped += 1
             return None
 
         self.attempted += 1
         try:
-            results = self.alpr.predict(crop)
+            detections = self.alpr.detector.predict(crop)
         except Exception:
             return None
 
-        best = None
-        for r in results:
-            if r.detection is None:
-                continue
+        best = shown = None
+        for det in detections:
             self.detected += 1
-            box = r.detection.bounding_box
-            width = box.x2 - box.x1
-            ocr = r.ocr
+            b = det.bounding_box
+            box = (max(b.x1, 0), max(b.y1, 0), min(b.x2, w), min(b.y2, h))
+            width = b.x2 - b.x1
+            if box[2] <= box[0] or box[3] <= box[1]:
+                continue
+            rel = (box[0] / w, box[1] / h, box[2] / w, box[3] / h)
+            if shown is None or det.confidence > shown["det"]:
+                shown = dict(frame=frame_index, rel=rel, text=None, conf=0.0, det=det.confidence)
+            # The width gate runs before OCR: a read below it would be
+            # discarded anyway, so it is not worth the OCR call. Two-row
+            # plates have their own, smaller gate.
+            two_row = width / max(1, b.y2 - b.y1) < TWO_ROW_ASPECT
+            if width < (self.min_plate_width_two_row if two_row else self.min_plate_width):
+                continue
+            pixels = self._ocr_pixels(crop, box, frame, origin)
+            if not pixels.size:
+                continue
+            try:
+                ocr = self.alpr.ocr.predict(pixels)
+            except Exception:
+                continue
             if ocr is None or not ocr.text:
                 continue
             conf = self._mean_conf(ocr.confidence)
-
-            # The two gates that keep nonsense out of the vote.
-            if width < self.min_plate_width or conf < self.min_conf:
+            # Any read is kept for display (a partial read is still useful to
+            # an operator); only a confident one may vote.
+            if shown["text"] is None or conf > shown["conf"]:
+                shown = dict(frame=frame_index, rel=rel, text=normalise(ocr.text), conf=conf,
+                             det=det.confidence)
+            if conf < self.min_conf:
                 continue
-            if best is None or conf > best[1]:
-                best = (ocr.text, conf, width)
+            # Prefer a read that is a valid plate as read, then confidence.
+            key = (is_valid_indian(ocr.text), conf)
+            if best is None or key > best[0]:
+                best = (key, ocr.text, conf, width, pixels)
 
+        if shown is not None:
+            self.seen[track_id] = shown
         if best is None:
             return None
 
+        _key, text, conf, width, pixels = best
         self.accepted += 1
-        self.votes[track_id].add(*best)
-        return best
+        gray = cv2.cvtColor(pixels, cv2.COLOR_BGR2GRAY) if pixels.ndim == 3 else pixels
+        sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        fingerprint = hashlib.blake2b(np.ascontiguousarray(pixels).tobytes(), digest_size=8).digest()
+        self.votes[track_id].add(text, conf, width, frame=frame_index,
+                                 sharpness=sharpness, fingerprint=fingerprint)
+        return text, conf, width
 
     def consensus(self, track_id):
         """Best-known plate for a track, or (None, 0, 0)."""
@@ -390,11 +594,11 @@ class PlateReader:
             return None, 0.0, 0
         return self.votes[track_id].consensus()
 
-    def confirmed(self, track_id, min_votes=2):
-        """Corroborated, format-valid plate for a track, or (None, ...)."""
+    def confirmed(self, track_id, min_votes=None):
+        """Confirmed plate for a track (per-character multi-frame vote), or (None, ...)."""
         if track_id not in self.votes:
             return None, 0.0, 0
-        return self.votes[track_id].confirmed(min_votes)
+        return self.votes[track_id].confirmed(min_votes or self.min_votes)
 
     def best_evidence(self, track_id):
         """(raw_text, confidence, width) of this track's best individual
@@ -403,15 +607,48 @@ class PlateReader:
             return None, 0.0, 0
         return self.votes[track_id].best_evidence()
 
-    def read_vehicles(self, frame, boxes, track_ids, frame_count, every):
+    def display(self, track_id, vehicle_xyxy):
+        """What the detector view shows for a track: dict(text, confirmed, box)
+        or None. `text` is the confirmed plate, else the best tentative or
+        latest partial read with a trailing "?"; `box` is where the plate was
+        last seen, projected onto the vehicle's current box (frame coords)."""
+        text, _s, _n = self.confirmed(track_id)
+        confirmed = text is not None
+        seen = self.seen.get(track_id)
+        if not confirmed:
+            tentative, _s, _n = self.consensus(track_id)
+            partial = seen["text"] if seen else None
+            best = tentative or partial
+            # A two- or three-character fragment tells an operator nothing and
+            # just clutters the view; the plate box alone is shown instead.
+            text = f"{best}?" if best and len(best) >= DISPLAY_MIN_CHARS else None
+        box = None
+        if seen is not None:
+            vx1, vy1, vx2, vy2 = vehicle_xyxy
+            rx1, ry1, rx2, ry2 = seen["rel"]
+            vw, vh = vx2 - vx1, vy2 - vy1
+            box = (vx1 + rx1 * vw, vy1 + ry1 * vh, vx1 + rx2 * vw, vy1 + ry2 * vh)
+        if text is None and box is None:
+            return None
+        return dict(text=text, confirmed=confirmed, box=box)
+
+    def read_vehicles(self, frame, boxes, track_ids, frame_count, every, class_names=None):
         """Run plate OCR on this frame's vehicle crops.
 
         Sampling is staggered by track id so a given vehicle is looked at every
         `every` frames while the per-frame cost stays spread out, rather than
-        every vehicle landing on the same frame.
+        every vehicle landing on the same frame. `class_names` (one per box,
+        optional) lets two-wheelers/autos use the smaller two-row plate gate.
         """
         h, w = frame.shape[:2]
-        for box, track_id in zip(boxes, track_ids):
+        # Display memory is per live track; drop tracks long gone so a worker
+        # that runs for days does not accumulate it.
+        if frame_count % 300 == 0 and self.seen:
+            for tid in [t for t, s in self.seen.items()
+                        if s["frame"] is not None and frame_count - s["frame"] > 300]:
+                del self.seen[tid]
+        names = class_names if class_names is not None else [None] * len(track_ids)
+        for box, track_id, name in zip(boxes, track_ids, names):
             if (frame_count + int(track_id)) % every:
                 continue
             # A confirmed track's reported plate cannot change (callers
@@ -427,26 +664,27 @@ class PlateReader:
             x2, y2 = min(w, int(x + bw / 2)), min(h, int(y + bh / 2))
             if x2 - x1 < 2 or y2 - y1 < 2:
                 continue
-            self.read_crop(frame[y1:y2, x1:x2], track_id)
+            self.read_crop(frame[y1:y2, x1:x2], track_id, frame=frame,
+                           origin=(x1, y1), frame_index=frame_count,
+                           two_row_vehicle=name in self.two_row_classes)
 
-    def summary(self, min_votes=2):
+    def summary(self, min_votes=None):
         """Resolved plates for every track, best-supported first."""
         rows = []
         for tid, vote in self.votes.items():
             text, score, n = vote.consensus()
             if not text:
                 continue
-            edits = vote.min_edits(text)
+            confirmed_text = vote.confirmed(min_votes or self.min_votes)[0]
             rows.append({
-                "track_id": tid, "plate": text, "score": score,
+                "track_id": tid, "plate": confirmed_text or text, "score": score,
                 "votes": n, "reads": len(vote.reads),
                 "best_width": vote.best_width,
-                "edits": edits,
-                "valid": is_valid_indian(text),
-                "confirmed": bool(is_valid_indian(text) and n >= min_votes
-                                  and edits == 0),
+                "edits": vote.min_edits(text),
+                "valid": is_valid_indian(confirmed_text or text),
+                "confirmed": confirmed_text is not None,
             })
-        return sorted(rows, key=lambda r: -r["score"])
+        return sorted(rows, key=lambda r: (not r["confirmed"], -r["score"]))
 
 
 # --------------------------------------------------------------------------
@@ -464,13 +702,24 @@ def add_plate_args(parser):
         help="Run plate OCR every Nth frame per vehicle (default: 3)",
     )
     parser.add_argument(
-        "--min-plate-width", type=int, default=100,
-        help="Skip OCR below this plate width in px; below ~100 reads are "
-             "confident nonsense (default: 100)",
+        "--min-plate-width", type=int, default=DEFAULT_MIN_PLATE_WIDTH,
+        help="Skip OCR below this single-row plate width in px; below ~100 "
+             f"reads are confident nonsense (default: {DEFAULT_MIN_PLATE_WIDTH})",
     )
     parser.add_argument(
-        "--min-plate-conf", type=float, default=0.80,
-        help="Minimum OCR confidence to count a read (default: 0.80)",
+        "--min-plate-width-two-row", type=int, default=DEFAULT_MIN_PLATE_WIDTH_TWO_ROW,
+        help="Same gate for two-row plates (two-wheelers, autos), whose "
+             f"characters are ~2x taller (default: {DEFAULT_MIN_PLATE_WIDTH_TWO_ROW})",
+    )
+    parser.add_argument(
+        "--min-plate-conf", type=float, default=DEFAULT_MIN_CONF,
+        help="Minimum OCR confidence for a read to vote (default: "
+             f"{DEFAULT_MIN_CONF}); confirmation itself needs the multi-frame vote",
+    )
+    parser.add_argument(
+        "--plate-votes", type=int, default=DEFAULT_MIN_VOTES,
+        help="Independent frames that must agree, character by character, "
+             f"before a plate is confirmed (default: {DEFAULT_MIN_VOTES})",
     )
     return parser
 
@@ -490,12 +739,16 @@ def build_reader(args, device, tag):
         device=device,
         min_plate_width=args.min_plate_width,
         min_conf=args.min_plate_conf,
+        min_votes=getattr(args, "plate_votes", DEFAULT_MIN_VOTES),
+        min_plate_width_two_row=getattr(args, "min_plate_width_two_row", DEFAULT_MIN_PLATE_WIDTH_TWO_ROW),
     )
     print(f"[{tag}] Plates:  every {args.plate_every} frames/vehicle, "
-          f"min plate {args.min_plate_width}px, min conf {args.min_plate_conf}")
+          f"min plate {reader.min_plate_width}px (two-row {reader.min_plate_width_two_row}px), "
+          f"min conf {args.min_plate_conf}, confirm on {reader.min_votes} agreeing frames")
     providers = reader.providers()
     print(f"[{tag}] Plate ONNX: {providers} "
-          f"(vehicle pre-gate {reader.min_crop_width}px)")
+          f"(vehicle pre-gate {reader.min_crop_width}px, two-wheelers/autos "
+          f"{reader.min_crop_width_two_row}px)")
     if providers == ["CPUExecutionProvider"]:
         print(f"[{tag}] NOTE: plate models are on CPU only (~90ms/crop). "
               f"On CUDA hardware: pip install onnxruntime-gpu==1.22.0. "
@@ -530,7 +783,8 @@ def print_summary(reader, tag):
             fixes = r["edits"] if r["edits"] < 99 else "-"
             print(f"  {r['track_id']:>6} {r['plate']:>12} {r['votes']:>6} "
                   f"{r['reads']:>6} {r['best_width']:>6} {str(fixes):>6}  {status}")
-        print("\n  'confirmed' = unrepaired format match, seen 2+ times.")
-        print("  Anything needing character fixes stays tentative by design:")
-        print("  a repaired read can look valid while being wrong.")
+        print(f"\n  'confirmed' = {reader.min_votes}+ frames agreed on the length and on")
+        print("  every character of a plate that was valid exactly as read.")
+        print("  Anything else stays tentative by design: a repaired or")
+        print("  single-frame read can look valid while being wrong.")
     print(f"{'=' * 66}")

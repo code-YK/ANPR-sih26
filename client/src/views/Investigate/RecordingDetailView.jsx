@@ -257,8 +257,8 @@ export default function RecordingDetailView() {
                     {t.plate_confirmed ? (
                       <CertaintyMark state="confirmed" value={t.plate_confirmed} />
                     ) : t.plate_tentative ? (
-                      // Tentative here means real: a corroborated read that
-                      // didn't clear plates.py's zero-edit confirmation bar.
+                      // Tentative here means real: the track's best read,
+                      // short of plates.py's multi-frame confirmation vote.
                       // The live pipeline never reports these at all (see
                       // DetectorView's own note), so this is the one place
                       // in the console a genuinely unconfirmed plate is
@@ -268,7 +268,7 @@ export default function RecordingDetailView() {
                         state="inferred"
                         value={`${t.plate_tentative}?`}
                         label="inferred"
-                        title="Corroborated by more than one read, but at least one needed a character repair to fit the plate format -- not confirmed"
+                        title="Best read for this vehicle, not confirmed -- fewer than 3 frames agreed on every character"
                       />
                     ) : (
                       <CertaintyMark state="unknown" label="not read" />

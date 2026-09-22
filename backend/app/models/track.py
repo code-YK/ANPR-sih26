@@ -66,7 +66,8 @@ class Track(Base):
 
     # Vehicle only. Two columns, not one, because live and offline want
     # opposite things: `plate_confirmed` mirrors PlateReader.confirmed()
-    # (zero-edit, >=2 votes -- precision, right for a live alert);
+    # (>=3 frames agreeing per character on a valid-as-read plate --
+    # precision, right for a live alert);
     # `plate_tentative` mirrors consensus() (recall, right for an
     # investigator who can judge a tentative read themselves). Collapsing
     # them would undo the care in plates.py.

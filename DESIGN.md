@@ -316,6 +316,10 @@ a table cell:
 └───────────────────┘   raised --ink-700 surface, 1px --ink-600 rule
 ```
 
+Grouping follows how the plate is stamped: `GJ 01 AB 1234`; Delhi keeps the
+category letter with its district, `DL 2CBB 4791`; Bharat series reads
+`22 BH 1234 AA`. Anything else is shown exactly as read.
+
 Applied consistently in the Journey search, alert rows, watchlist entries,
 recent sightings, and the detector view. An unconfirmed read from the detector
 keeps the worker's own `?` suffix and takes the dashed treatment — a plate the

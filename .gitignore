@@ -89,6 +89,11 @@ backend/evidence/
 # time, so a machine without it simply has nothing to relay.
 /recorded-streams/
 
+# Know-Detection pipeline drop under evaluation -- local exploration only,
+# not adopted. Remove these once it is either merged properly or discarded.
+/Know-Detection-ui-changes/
+/Know-Detection-ui-changes.zip
+
 # Third-party binaries fetched per machine, never vendored: mediamtx backs
 # both the WebRTC/WHEP preview relay and government mode's own relay.
 # Point MEDIAMTX_BIN at wherever it lands on this machine.
