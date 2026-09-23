@@ -89,6 +89,25 @@ class Settings(BaseSettings):
     # observations/counts. This is separate from human browser sessions.
     worker_api_token: str | None = None
 
+    # Copilot: the conversational agent (app/agent). OpenRouter speaks the
+    # OpenAI chat-completions shape, so it is called with httpx rather than
+    # an SDK. Server-side only -- the key must never reach the browser, so
+    # it lives here and not in any VITE_* variable, which Vite compiles into
+    # the bundle. Unset disables the endpoint with a 503 and hides the
+    # launcher, rather than failing per request.
+    openrouter_api_key: str | None = None
+    # Must support native tool calling ("tools" in the model's
+    # supported_parameters on OpenRouter) -- without it the Copilot can only
+    # chat, which is not the feature. gpt-5-mini is the cost/accuracy knee:
+    # reliable on multi-tool turns at roughly a tenth of Sonnet's price.
+    # scripts/copilot_check_key.py --models compares the alternatives.
+    openrouter_model: str = "openai/gpt-5-mini"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    # Bounds one user turn. Without it a model that keeps calling tools can
+    # spend an unbounded number of paid completions on a single message.
+    copilot_max_tool_iterations: int = 8
+    copilot_request_timeout_seconds: float = 60.0
+
     # Investigate: offline recordings uploaded for forensic search.
     recordings_dir: str = "recordings"
     max_upload_mb: int = 2048

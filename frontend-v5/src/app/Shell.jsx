@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { ErrorBoundary, PageError } from "../components/ErrorBoundary.jsx";
 import { Skeleton } from "../components/ui.jsx";
+import CopilotLauncher from "../features/copilot/CopilotLauncher.jsx";
 import CameraGridView from "../features/live/CameraGridView.jsx";
 import FocusedCameraView from "../features/live/FocusedCameraView.jsx";
 import LogsDock from "../features/logs/LogsDock.jsx";
@@ -23,6 +24,9 @@ const WatchlistView = lazy(() => import("../features/watchlist/WatchlistView.jsx
 const RegistryView = lazy(() => import("../features/registry/RegistryView.jsx"));
 const InvestigateView = lazy(() => import("../features/investigate/InvestigateView.jsx"));
 const AdminView = lazy(() => import("../features/admin/AdminView.jsx"));
+// Lazy: the panel pulls in Leaflet for the camera picker, which has no
+// business in the initial bundle for a console most sessions never chat in.
+const CopilotPanel = lazy(() => import("../features/copilot/CopilotPanel.jsx"));
 
 function PageFallback() {
   return (
@@ -88,6 +92,13 @@ export default function Shell() {
       </ErrorBoundary>
       <ErrorBoundary name="logs">
         <LogsDock />
+      </ErrorBoundary>
+
+      <ErrorBoundary name="copilot">
+        <CopilotLauncher />
+        <Suspense fallback={null}>
+          <CopilotPanel />
+        </Suspense>
       </ErrorBoundary>
 
       <ErrorBoundary name="worker-sync">

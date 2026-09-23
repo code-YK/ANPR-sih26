@@ -8610,3 +8610,123 @@ button.primary:not(.secondary):not(.theme-toggle),
 [data-theme="light"] .landing-cinematic .landing-cta-primary {
   border-color: color-mix(in srgb, var(--entity) 35%, transparent) !important;
 }
+
+/* --------------------------------------------------------------------------
+   Copilot: floating launcher stacked above the Logs dock, and a right-docked
+   conversation panel. Docked rather than modal on purpose -- the assistant
+   navigates the page behind it, so that page has to stay visible.
+   -------------------------------------------------------------------------- */
+
+.copilot-fab {
+  position: fixed; right: 18px; bottom: 66px; z-index: 3001;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 14px; border-radius: 999px; cursor: pointer;
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+  font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+}
+.copilot-fab:hover,
+.copilot-fab.open { border-color: var(--entity); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28), var(--glow-entity); }
+.copilot-fab-label { font-family: var(--font-body); }
+
+.copilot-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 3001;
+  width: min(420px, 100vw);
+  display: flex; flex-direction: column;
+  background: var(--panel); border-left: 1px solid var(--border);
+  box-shadow: -18px 0 40px rgba(0, 0, 0, 0.4);
+}
+
+.copilot-head {
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+}
+.copilot-title { font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.02em; }
+.copilot-spacer { flex: 1; }
+.copilot-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0; cursor: pointer;
+  background: transparent; color: var(--muted);
+  border: 1px solid transparent; border-radius: var(--radius);
+}
+.copilot-icon:hover { color: var(--text); border-color: var(--border); }
+
+.copilot-body {
+  flex: 1; overflow-y: auto; padding: 14px 12px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+
+.copilot-intro { color: var(--muted); font-size: 13px; }
+.copilot-suggestions { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.copilot-suggestions button {
+  width: 100%; padding: 8px 10px; text-align: left; cursor: pointer;
+  background: transparent; color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  font-family: var(--font-body); font-size: 12.5px;
+}
+.copilot-suggestions button:hover { border-color: var(--entity); }
+
+.copilot-user {
+  align-self: flex-end; max-width: 88%;
+  padding: 8px 11px; border-radius: 12px 12px 3px 12px;
+  background: var(--accent-bg); color: var(--text);
+  font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.copilot-reply { display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
+.copilot-answer { margin: 0; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.copilot-error { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--danger, var(--warn)); font-size: 12.5px; }
+.copilot-activity { margin: 0; color: var(--muted); font-size: 12.5px; }
+.copilot-card-empty { margin: 0; color: var(--muted); font-size: 12.5px; }
+
+.copilot-workers { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.copilot-worker { display: flex; align-items: center; gap: 9px; padding: 8px 10px; }
+.copilot-worker + .copilot-worker { border-top: 1px solid var(--border); }
+.copilot-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.copilot-dot.on { background: var(--ok); }
+.copilot-dot.queued { background: var(--warn); }
+.copilot-worker-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.copilot-worker-cam { font-family: var(--font-mono); font-size: 12px; }
+.copilot-worker-mode { color: var(--muted); font-size: 11.5px; }
+.copilot-stop {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 9px; cursor: pointer;
+  background: transparent; color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  font-family: var(--font-body); font-size: 11.5px;
+}
+.copilot-stop:hover:not(:disabled) { border-color: var(--danger, var(--warn)); color: var(--danger, var(--warn)); }
+.copilot-stop:disabled { opacity: 0.55; cursor: default; }
+
+.copilot-picker { display: flex; flex-direction: column; gap: 8px; }
+.copilot-map { height: 190px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.copilot-picks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 168px; overflow-y: auto; }
+.copilot-picks button {
+  width: 100%; display: flex; align-items: baseline; gap: 8px;
+  padding: 6px 8px; text-align: left; cursor: pointer;
+  background: transparent; color: var(--text);
+  border: 1px solid transparent; border-radius: var(--radius);
+}
+.copilot-picks button:hover:not(:disabled) { border-color: var(--entity); }
+.copilot-pick-id { font-family: var(--font-mono); font-size: 11.5px; flex: none; }
+.copilot-pick-name { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.copilot-composer { display: flex; align-items: flex-end; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); }
+.copilot-composer textarea {
+  flex: 1; min-height: 36px; max-height: 140px; padding: 8px 10px; resize: vertical;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  font-family: var(--font-body); font-size: 13px; line-height: 1.45;
+}
+.copilot-composer textarea:focus-visible { outline: none; border-color: var(--entity); }
+.copilot-send {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; flex: none; cursor: pointer;
+  background: var(--accent-bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+.copilot-send:hover:not(:disabled) { border-color: var(--entity); }
+.copilot-send:disabled { opacity: 0.45; cursor: default; }
+
+@media (max-width: 767px) {
+  .copilot-fab { right: 12px; bottom: 62px; }
+}

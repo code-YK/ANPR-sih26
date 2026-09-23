@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import log_stream
+from app.config import get_settings
 from app.audit_middleware import append_access_audit
 from app.auth_service import AuthContext, ensure_seed_super_admin, get_current_auth
 from app.pipeline import webrtc_relay
@@ -21,6 +22,7 @@ from app.routers import (
     auth,
     cameras,
     catalogue_sources,
+    copilot,
     demo_mode,
     gap_analysis,
     government_mode,
@@ -49,6 +51,18 @@ async def lifespan(_app: FastAPI):
     analytics.kill_orphans_from_previous_run()
     webrtc_relay.kill_orphans_from_previous_run()
     await ensure_seed_super_admin()
+    # Say so at startup. The console hides the Copilot launcher when this is
+    # unset, which is right for an operator but leaves a developer hunting
+    # for a button that was never rendered.
+    if get_settings().openrouter_api_key:
+        logging.getLogger("sentinel.copilot").info(
+            "Copilot enabled (model: %s)", get_settings().openrouter_model
+        )
+    else:
+        logging.getLogger("sentinel.copilot").warning(
+            "Copilot disabled: OPENROUTER_API_KEY is not set in backend/.env. "
+            "The console will not show its launcher."
+        )
     # Monitoring requires an explicit operator action after every backend
     # restart, so no prior persisted intent may auto-start workers here --
     # see clear_persisted_intent.
@@ -146,6 +160,7 @@ app.include_router(webrtc.router, prefix="/api", tags=["webrtc"])
 app.include_router(investigate.router, prefix="/api", tags=["investigate"])
 app.include_router(demo_mode.router, prefix="/api", tags=["demo-mode"])
 app.include_router(government_mode.router, prefix="/api", tags=["government-mode"])
+app.include_router(copilot.router, prefix="/api", tags=["copilot"])
 
 
 @app.get("/api/health")

@@ -10,13 +10,15 @@ The served operator console is `frontend-v3/`. FastAPI serves its production bui
 
 | Path | Contents |
 |---|---|
-| `app/routers/` | HTTP surface: cameras, sightings, watchlist, alerts, analytics, investigate, auth, demo/government modes |
+| `app/routers/` | HTTP surface: cameras, sightings, watchlist, alerts, analytics, investigate, auth, demo/government modes, copilot |
+| `app/agent/` | Copilot: tool registry, system prompt, model loop, and the tools themselves (see [Copilot](#copilot)) |
 | `app/services/` | Domain logic outliving a request: gap analysis, districts, demo and government mode |
 | `app/models/` | SQLAlchemy models: camera, sighting, alert, watchlist, track, recording, auth, analytics counts |
 | `app/pipeline/` | Media and ingest plumbing: capture, probe, media normalisation, catalogue sync, geocode, WebRTC relay |
 | `app/templates/` | Jinja templates for HTML/PDF report exports |
 | `migrations/` | Alembic migrations. Current head: `202608312000` |
 | `scripts/` | Seeds, smoke tests, relay launchers |
+| `tests/` | Offline `pytest` suite (no database, no network) |
 | `fixtures/` | Committed, safe camera datasets (see `fixtures/README.md`) |
 | `survey/`, `recordings/`, `evidence/` | Runtime output, git-ignored |
 
@@ -116,6 +118,55 @@ Stages 1-3 access the configured sandbox; Stages 2/3 open live streams per camer
 
 Stage 3 (`anpr_viable` / `anpr_notes`) and department/ownership/type/connectivity/storage/retention are then set per camera through the UI edit form, the `PUT /api/cameras/:id` endpoint, or a CSV bulk import (`POST /api/cameras/bulk`). In CSV, a known nonblank `camera_id` updates a record; a blank ID creates a metadata-first `manual-N` record and requires `name` plus `location_text`; a supplied unknown ID is rejected. There is no automated ANPR-viability judgement, per the build spec.
 
+## Copilot
+
+The console's natural-language assistant. An operator types "trace HR29BG7381"; the assistant calls the matching backend operation, answers from tool results, and opens the Journey page behind the chat panel.
+
+It runs **in-process** rather than as an MCP server so its tools execute under the caller's own `AuthContext` — see [ADR 0005](../docs/decisions/0005-copilot-in-process-agent.md) for why that is a security requirement rather than a preference. Endpoint contract: [../docs/api.md](../docs/api.md).
+
+The backend half is UI-agnostic, and both live consoles have a panel over it: `frontend-v5/src/features/copilot/` (zustand + react-query) and `client/src/components/Copilot.jsx` with `client/src/lib/copilot.js` (React context + plain hooks). The two SSE parsers are deliberate duplicates — the consoles have separate builds and no shared package — so a change to the event protocol must be made in both. `client` translates the backend's `frontend-v5` routes to its own (`/journeys` → `/journey`); it focuses a camera through local state rather than the URL, so `navigate_to(page='live_camera')` opens the Live view without deep-linking that camera.
+
+### Enabling it
+
+Add an [OpenRouter](https://openrouter.ai/keys) key to `backend/.env` and restart:
+
+```
+OPENROUTER_API_KEY=sk-or-v1-...
+```
+
+Startup logs which way it went (`Copilot enabled (model: …)` / `Copilot disabled: OPENROUTER_API_KEY is not set`). Unset, `GET /api/copilot/status` reports `available: false`, the console hides its launcher, and nothing else is affected. The key is server-side only — never place it in a `VITE_*` variable, which Vite compiles into the browser bundle.
+
+The model **must** support native tool calling (`"tools"` in its `supported_parameters` on OpenRouter); without it the assistant can only chat. Override with `OPENROUTER_MODEL`. Costs below are per exchange at roughly 10k input tokens — the system prompt plus 19 tool schemas, resent on each completion, twice for a tool-calling turn — and ~300 output.
+
+| Model | per 1M tokens | per exchange | |
+|---|---|---|---|
+| `openai/gpt-5-mini` | $0.25 / $2 | ~$0.003 | default; the cost/accuracy knee |
+| `google/gemini-2.5-flash` | $0.30 / $2.50 | ~$0.004 | equivalent, 1M context |
+| `openai/gpt-5-nano` | $0.05 / $0.40 | ~$0.0006 | cheaper, weaker on multi-tool turns |
+| `openrouter/free` | free | free | rate-limited; development only |
+
+### Guardrails
+
+Scope never comes from the model: no tool exposes `department`, `user_id`, `role`, `clearance`, `auth` or `session` in its schema, asserted at registration and by test. There is no per-action confirmation step, which is safe only because the registry contains no irreversible operation — no delete, camera administration, catalogue sync, mode toggle or user administration is reachable, and a test asserts those names stay absent. Adding a destructive tool means building a confirmation flow first. Every call appends a `copilot.tool_invoked` audit event.
+
+### Operating it
+
+```bash
+cd backend
+.venv/bin/python scripts/copilot.py key              # balance, configured model, cost per exchange
+.venv/bin/python scripts/copilot.py key --models     # cheapest tool-capable models
+.venv/bin/python scripts/copilot.py tools            # every tool against the real database
+.venv/bin/python scripts/copilot.py tools --mutate   # also start, then stop, ANPR on one camera
+.venv/bin/python scripts/copilot.py prompts          # behaviour checklist against the real model
+.venv/bin/python scripts/copilot.py ask "trace HR29BG7381"
+```
+
+`tools` needs only the database. `key`, `prompts` and `ask` call OpenRouter and cost a request. The API key is never printed.
+
+`prompts` is the check that matters: `pytest` fakes the model, so it proves the plumbing but says nothing about whether the system prompt actually asks instead of guessing. Models are non-deterministic — re-run a single failure with `--case <name>` before editing `app/agent/prompt.py`.
+
+**Recorded 2026-09-23** on `openai/gpt-5-mini`, commit pending: `tools` 14/14 read tools and 4/4 refusals; `prompts` 9/9 — including asking which camera rather than choosing one, calling `find_cameras_near` instead of inventing a camera id, declining `delete camera cam11`, and demanding a reason before a watchlist write. Not yet verified: prompt-injection resistance against adversarial OCR text, and the panel in a signed-in browser.
+
 ## Migrations
 
 ```bash
@@ -128,6 +179,15 @@ cd backend
 Write every migration to be **idempotent where it cheaply can be** (`if_not_exists` on index creation). The database is shared across machines, and a migration that assumes a clean schema fails on the second one.
 
 ## Tests
+
+```bash
+cd backend
+.venv/bin/python -m pytest        # 76 offline tests; no database, no network, no API key
+```
+
+`tests/` covers the Copilot only. It runs against fakes on purpose — the point is the registry's contract, not SQLAlchemy, and the routers it delegates to are covered by the smoke tests below. `test_copilot_registry.py` asserts the scope invariant (no tool leaks `department`/`user_id`/`auth` into a generated schema), the exact set of mutating tools, and the absence of every destructive name. `test_copilot_permissions.py` covers ANPR needing camera-admin while Person/Suspicious need only operator clearance, and 404-before-403 ordering. `test_copilot_loop.py` covers streamed tool-call reassembly, result truncation, the iteration cap, and that dispatches never overlap on the shared `AsyncSession`. `test_copilot_endpoint.py` drives the real HTTP endpoint: SSE framing, 503 when unconfigured, request validation, rate limiting, and that a `system` role cannot be injected through the transcript.
+
+For behaviour against a real model, see [Copilot](#copilot) — `pytest` cannot prove the system prompt works.
 
 `scripts/smoke_test.py` exercises a useful API slice against a running backend: authenticated camera CRUD, deterministic offline probe/health-history and maintenance-work-order lifecycle verification, CSV create/update validation, catalogue sync, gap-analysis export, watchlist CRUD/bulk import, worker-authenticated sighting ingestion, watchlist matching, alert deduplication/lifecycle, and journey lookup. Its created rows use a `SMOKETEST` marker and are cleaned up afterward. The test process must have the same `SUPER_ADMIN_*` and `WORKER_API_TOKEN` settings as the backend.
 
@@ -146,4 +206,4 @@ The default run is not a complete offline or deterministic test suite: its catal
 
 The optional `--live` test probes for a currently reachable camera rather than assuming a fixed ID. It reports worker lifecycle separately from whether a plate happened to be confirmed during the run. Do not use `--live` for routine verification, and never retain observed identifiers or footage in Git or shared logs.
 
-No other automated tests exist yet.
+Outside `tests/` and these two scripts, no other automated tests exist yet.

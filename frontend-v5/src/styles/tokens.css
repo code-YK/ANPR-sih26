@@ -148,6 +148,9 @@
   --z-panel: 60;
   --z-toast: 70;
   --z-logs: 80;
+  /* Above the Logs dock: the Copilot launcher stacks on top of it, and the
+     panel must sit over page content while still yielding to dialogs. */
+  --z-copilot: 82;
   --z-dialog: 85;
   --z-tooltip: 90;
 

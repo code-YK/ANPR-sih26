@@ -23,6 +23,7 @@ import { CamerasProvider, useCameras } from "./context/CamerasContext.jsx";
 import { DepartmentsProvider } from "./context/DepartmentsContext.jsx";
 import { ThemeProvider, useTheme } from "./context/ThemeContext.jsx";
 import LoadingScreen from "./components/LoadingScreen.jsx";
+import Copilot from "./components/Copilot.jsx";
 import LogsPanel from "./components/LogsPanel.jsx";
 import BrandMark from "./components/BrandMark.jsx";
 import StatusStrip from "./components/StatusStrip.jsx";
@@ -398,6 +399,7 @@ function AuthenticatedShell() {
 
             <StatusStrip />
             <LogsPanel />
+            <Copilot />
           </div>
         </AlertsProvider>
       </CamerasProvider>

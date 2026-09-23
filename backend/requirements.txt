@@ -27,3 +27,9 @@ python-multipart==0.0.20
 jinja2==3.1.5
 weasyprint==63.1
 numpy==2.4.6
+
+# Test-only. The suite runs without a database or an OpenRouter key: it
+# exercises the Copilot registry, its permission handling and its SSE
+# protocol against fakes (see tests/conftest.py).
+pytest==8.3.4
+pytest-asyncio==0.25.2
