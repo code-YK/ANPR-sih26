@@ -4,7 +4,7 @@ Investigate is the offline forensic-search feature: upload a recording,
 process it for vehicles or people, then search by plate -- or by uploading a
 person photo, which ranks person tracks by appearance similarity ("more like
 this" and the subject-linking UI are still not wired up). The frontend
-(`frontend-v2/src/views/Investigate/`) is in place: Recordings list +
+(`client/src/views/Investigate/`) is in place: Recordings list +
 upload, per-recording ingest run management,
 plate Search with a results grid grouped by recording, and clip playback
 with a frame-accurate bounding-box overlay drawn on a `<canvas>` over the

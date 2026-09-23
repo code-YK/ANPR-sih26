@@ -9,9 +9,9 @@ export default defineConfig({
     // (see api.js) deliberately fetch video cross-origin from the backend even
     // in dev, so this origin has to be a known, stable entry in the backend's
     // CORS allowlist (backend/app/main.py) rather than whatever port happened
-    // to be free -- a Vite auto-increment (5174, 5175, ...) here would silently
-    // break every video fetch with a CORS error the next time frontend-v2's own
-    // dev server (port 5173) was already running first.
+    // to be free -- a Vite auto-increment (5175, 5176, ...) here would silently
+    // break every video fetch with a CORS error the next time frontend-v5's own
+    // dev server (port 5175) was already running first.
     port: 5174,
     strictPort: true,
     proxy: {

@@ -128,8 +128,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173", "http://127.0.0.1:5173",  # frontend-v2 dev server
-        "http://localhost:5174", "http://127.0.0.1:5174",  # frontend-v3 dev server (fixed port, see its vite.config.js)
+        "http://localhost:5174", "http://127.0.0.1:5174",  # client dev server (fixed port, see its vite.config.js)
         "http://localhost:5175", "http://127.0.0.1:5175",  # frontend-v5 dev server (fixed port, see its vite.config.js)
         "http://localhost:8000", "http://127.0.0.1:8000",
     ],
@@ -179,28 +178,16 @@ async def protected_docs(_auth: AuthContext = Depends(get_current_auth)):
 
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-# frontend-v5 is the console replacing v3. Its build is served whenever it
-# exists; until it has been built, v3's build keeps the root working.
-_REACT_DIST_DIR = next(
-    (
-        path
-        for path in (
-            os.path.join(_REPO_ROOT, "frontend-v5", "dist"),
-            os.path.join(_REPO_ROOT, "frontend-v3", "dist"),
-        )
-        if os.path.isdir(path)
-    ),
-    os.path.join(_REPO_ROOT, "frontend-v3", "dist"),
-)
+# frontend-v5 is the only built/served console. Its dist/ must exist (run its
+# build) for the root route to serve anything.
+_REACT_DIST_DIR = os.path.join(_REPO_ROOT, "frontend-v5", "dist")
 
 # Static assets are public so the login page can load; all data/media APIs
-# called by the React application enforce authentication. The old vanilla UI
-# is deliberately not mounted because it has no login flow and would present
-# a misleading unauthenticated application shell.
+# called by the React application enforce authentication.
 #
 # frontend-v5 is the served console once built (see _REACT_DIST_DIR above);
-# frontend-v3 and frontend-v2 stay in the tree as references and keep their
-# dev-server CORS entries so they can still be run side by side.
+# client/ is a second console developed against its own dev server and is
+# never mounted here (see README#which-console-is-served).
 
 
 class _SpaStaticFiles(StaticFiles):

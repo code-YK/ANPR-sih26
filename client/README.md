@@ -1,8 +1,8 @@
-# Operator console (frontend-v3)
+# Operator console (client)
 
-**This is the served operator console** for SIH26127. FastAPI mounts its production build at `/`. It provides the registry and GIS map, the live video wall, watchlist, alerts, vehicle trajectory search, offline forensic search (Investigate), and the analytics controls, all backed by the FastAPI `/api` surface.
+A second operator console for SIH26127, under active development. It provides the registry and GIS map, the live video wall, watchlist, alerts, vehicle trajectory search, offline forensic search (Investigate), and the analytics controls, all backed by the FastAPI `/api` surface.
 
-It is a strict superset of `frontend-v2`: every view, context and hook that console has, plus a loading screen and GSAP reveal animations.
+**This console is not served.** `frontend-v5/` is the served operator console — FastAPI mounts its production build at `/`. `client/` is developed against its own dev server (see below) and proxies `/api` to the backend; its build is never mounted. See the repository [README](../README.md#which-console-is-served) for which console is canonical.
 
 ## Directory map
 
@@ -29,25 +29,25 @@ It is a strict superset of `frontend-v2`: every view, context and hook that cons
 ## Development
 
 ```bash
-npm --prefix frontend-v3 ci
-npm --prefix frontend-v3 run dev
+npm --prefix client ci
+npm --prefix client run dev
 ```
 
 Opens on **http://localhost:5174**. API requests are proxied to the local backend by `vite.config.js`.
 
 ### Why the port is fixed
 
-`vite.config.js` sets `port: 5174` with `strictPort: true`. This is deliberate, not a preference. `hlsProxyUrl` and `recordingMediaUrl` in `src/api.js` fetch video **cross-origin from the backend even in development**, so this origin has to be a known, stable entry in the backend's CORS allowlist (`backend/app/main.py`). If Vite were allowed to auto-increment to the next free port — which it would do whenever `frontend-v2`'s dev server on 5173 was already running — every video fetch would fail with an opaque CORS error.
+`vite.config.js` sets `port: 5174` with `strictPort: true`. This is deliberate, not a preference. `hlsProxyUrl` and `recordingMediaUrl` in `src/api.js` fetch video **cross-origin from the backend even in development**, so this origin has to be a known, stable entry in the backend's CORS allowlist (`backend/app/main.py`). If Vite were allowed to auto-increment to the next free port — which it would do whenever `frontend-v5`'s dev server on 5175 was already running — every video fetch would fail with an opaque CORS error.
 
 ## Verification and production build
 
 ```bash
-npm --prefix frontend-v3 ci
-npm --prefix frontend-v3 run lint
-npm --prefix frontend-v3 run build
+npm --prefix client ci
+npm --prefix client run lint
+npm --prefix client run build
 ```
 
-The build is written to `frontend-v3/dist/`. Start the backend afterwards and open <http://127.0.0.1:8000/>.
+The build is written to `client/dist/`, but it is **never mounted** by the backend (see above) — this only verifies the console compiles.
 
 Lint and build only prove the console compiles. They do not prove live-feed availability, browser compatibility, or accessibility. Record separate browser evidence for any UI claim.
 

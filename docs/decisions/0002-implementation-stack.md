@@ -18,14 +18,14 @@ Use the following Phase 1 stack:
 - FastAPI 0.115.6 with Uvicorn 0.34.0 for the HTTP application;
 - SQLAlchemy 2.0.36 and Alembic 1.14.0 for persistence and migrations;
 - PostgreSQL 16+ with PostGIS for registry, spatial, observation, watchlist, alert, and trajectory metadata (currently hosted: PostgreSQL 18.6 / PostGIS 3.6.4);
-- React 19 with Vite 8 and React Router for the served operator console (`frontend-v3`);
+- React 19 with Vite 8 and React Router for the served operator console (`frontend-v5`);
 - Leaflet 1.9 through React Leaflet 5 for GIS presentation;
 - FFmpeg/ffprobe and OpenCV for stream probing, capture, decode, and frame handling;
 - YOLO11 with ByteTrack and fast-alpr/ONNX Runtime for the current ANPR baseline; and
 - direct worker subprocesses supervised by the modular monolith, without Redis, Kafka, Kubernetes, or a local microservice split; and
 - **CUDA 12.8+** with torch 2.11.0+cu128 for the analytics environment - mandatory, not advisory, on RTX 50-series (Blackwell, sm_120) hardware.
 
-The exact backend package lock is `backend/requirements.txt`. The exact frontend dependency graph is `frontend-v3/package-lock.json`. Native dependencies - PostgreSQL/PostGIS, FFmpeg, MediaMTX, GPU drivers, CUDA, ONNX Runtime - must be recorded on the demonstration machine.
+The exact backend package lock is `backend/requirements.txt`. The exact frontend dependency graph is `frontend-v5/package-lock.json`. Native dependencies - PostgreSQL/PostGIS, FFmpeg, MediaMTX, GPU drivers, CUDA, ONNX Runtime - must be recorded on the demonstration machine.
 
 ### Why Python 3.11, not newer
 

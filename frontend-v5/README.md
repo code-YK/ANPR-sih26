@@ -1,6 +1,6 @@
 # frontend-v5 — operator console
 
-React 19 + Vite 8 console for **SIH26127**, and **the served UI**: `backend/app/main.py` mounts `frontend-v5/dist` at `/`, falling back to `frontend-v3/dist` only when this has not been built.
+React 19 + Vite 8 console for **SIH26127**, and **the served UI**: `backend/app/main.py` mounts `frontend-v5/dist` at `/`.
 
 `client/` is a second console under active development on port 5174. Its build is never served. Two consoles are maintained in parallel, so **a feature added here does not appear there** — see the repository [README](../README.md#which-console-is-served) and the open decision in [PROJECT_STATE.md](../PROJECT_STATE.md).
 

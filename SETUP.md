@@ -7,10 +7,10 @@ There are three independently runnable components:
 | Component | Path | Stack |
 | --- | --- | --- |
 | Backend API | `backend/` | Python 3.11 · FastAPI · PostgreSQL/PostGIS |
-| Operator console | `frontend-v3/` | React 19 · Vite 8 — **the served UI** |
+| Operator console | `frontend-v5/` | React 19 · Vite 8 — **the served UI** |
 | Analytics / tracking | `multi-object-tracking/` | Python 3.11 · PyTorch (CUDA) |
 
-> `frontend-v2/` is the previous console, kept as reference and still runnable on port 5173. `frontend/` is the original vanilla UI and is not served. The backend serves `frontend-v3/dist` at `/`.
+> `client/` is a second console under active development, still runnable on port 5174, but its build is never served. The backend serves `frontend-v5/dist` at `/`.
 
 ---
 
@@ -167,24 +167,24 @@ Three MediaMTX instances can run side by side on deliberately distinct ports:
 
 ---
 
-## 6. Operator console (frontend-v3)
+## 6. Operator console (frontend-v5)
 
 ```bash
-npm --prefix frontend-v3 ci
-npm --prefix frontend-v3 run dev
+npm --prefix frontend-v5 ci
+npm --prefix frontend-v5 run dev
 ```
 
-Opens on **port 5174**, fixed via `strictPort`. That is not arbitrary: video is fetched cross-origin from the backend even in development, so this origin must be a known entry in the backend's CORS allowlist. Letting Vite auto-increment the port would silently break every video fetch with a CORS error.
+Opens on **port 5175**, fixed via `strictPort`. That is not arbitrary: video is fetched cross-origin from the backend even in development, so this origin must be a known entry in the backend's CORS allowlist. Letting Vite auto-increment the port would silently break every video fetch with a CORS error.
 
 Build a production bundle so the backend serves it at `/`:
 
 ```bash
-npm --prefix frontend-v3 run build
+npm --prefix frontend-v5 run build
 ```
 
 Scripts: `dev`, `build`, `preview`, `lint`.
 
-To run the older console alongside it: `npm --prefix frontend-v2 run dev` (port 5173, also allow-listed).
+To run the second console alongside it: `npm --prefix client run dev` (port 5174, also allow-listed, but its build is never served).
 
 ---
 
@@ -255,7 +255,7 @@ When sharing `recorded-streams/`, **exclude `_relay/`** — it is machine-local 
 curl http://127.0.0.1:8000/api/health
 
 # 2. console builds
-npm --prefix frontend-v3 run build
+npm --prefix frontend-v5 run build
 
 # 3. every Python file parses under 3.11
 backend/.venv/Scripts/python.exe -m compileall -q backend/app backend/scripts multi-object-tracking

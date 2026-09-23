@@ -7,7 +7,7 @@ Date: 2026-08-30 (direction accepted); implementation recorded 2026-08-30
 Owners: Team
 
 This document states the visual and interaction direction for the React
-operator console (`frontend-v2/`), the token system that expresses it, and the
+operator console (`client/`), the token system that expresses it, and the
 rules for the components that recur across every view.
 
 All six adoption steps in §13 are merged on `main`. Four details remain
@@ -53,7 +53,7 @@ Every mainstream dashboard answers the first question and quietly suppresses
 the other two. Sentinel is architecturally committed to answering all three:
 the registry carries `metadata_confidence` so that "an inference must never
 render as if it were a confirmed fact"
-([`Badge.jsx`](frontend-v2/src/components/Badge.jsx)); the HLS player reports
+([`Badge.jsx`](client/src/components/Badge.jsx)); the HLS player reports
 its own reconnect count because "presenting it as one unbroken feed would
 misrepresent it" ([`docs/operator-console-build-spec.md`](docs/operator-console-build-spec.md));
 the journey endpoint returns `restricted_stops` and `unplaced_stops` rather
@@ -74,7 +74,7 @@ CRUD. Under `GOV-SUB-003` the judged artifact is a screen recording of the real
 software, so the console's appearance is a submission deliverable, not polish.
 
 It also carried one substantive defect. In
-[`style.css`](frontend-v2/src/style.css), amber (`--warn`) meant three
+[`style.css`](client/src/style.css), amber (`--warn`) meant three
 unrelated things at once:
 
 | Amber meant | Kind of statement |
@@ -548,7 +548,7 @@ review coverage in Registry." not "No data found."
 Three replacements, each a net reduction in code and an accessibility gain:
 
 - **`<dialog>`** replaces the div-based `.modal-backdrop` in
-  [`Modal.jsx`](frontend-v2/src/components/Modal.jsx). Open with `.showModal()`,
+  [`Modal.jsx`](client/src/components/Modal.jsx). Open with `.showModal()`,
   close with `.close()`, and set `inert` on the shell container while it is open
   so background scroll and screen-reader content are both sealed off. Focus
   trapping, Esc-to-close, and the backdrop come free and currently do not exist

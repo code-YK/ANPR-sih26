@@ -7,8 +7,8 @@ export default defineConfig({
     // Fixed port: in dev, media (HLS, MJPEG, evidence) is fetched from the
     // backend's own origin to keep it off this origin's HTTP/1.1 connection
     // pool (see src/lib/api/media.js), so this origin must be a known entry
-    // in the backend's CORS allowlist (backend/app/main.py). 5173 and 5174
-    // belong to frontend-v2 and frontend-v3.
+    // in the backend's CORS allowlist (backend/app/main.py). 5174 belongs
+    // to client.
     port: 5175,
     strictPort: true,
     // On this Windows setup the watcher has served a module read mid-write

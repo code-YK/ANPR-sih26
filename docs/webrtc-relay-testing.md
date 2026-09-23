@@ -141,7 +141,7 @@ curl -s http://127.0.0.1:9997/v3/paths/get/<camera_id> | jq '.readers'
 ```
 
 **Open item, not yet resolved:** driving this same check through the actual
-`frontend-v2` Live view under headless Chromium (Playwright, in this
+`client` Live view under headless Chromium (Playwright, in this
 project's own sandboxed shell tool) reproduced `connectionState` reaching
 `"connected"` -- with `ontrack` firing and real media briefly flowing -- and
 then dropping to `"disconnected"` roughly 1-2s later, consistently, across

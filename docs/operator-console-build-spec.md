@@ -15,8 +15,8 @@ forward-looking plan — see `PROJECT_STATE.md` for current status and
 React 19 + Vite, `react-router-dom` v7, `react-leaflet` v5, `hls.js` v1.7.
 No TypeScript, Tailwind, Redux, or SSR — the spec's original React 18 target
 moved to 19 because Vite's current template and react-leaflet 5/react-router
-7 pull it in with no conflicts. Lives at `frontend-v2/`; the vanilla
-UI (`frontend/`) remains as migration reference only. It is no longer served because it has no authentication flow; `frontend-v2/` is the only application shell.
+7 pull it in with no conflicts. Lives at `client/`; the vanilla
+UI (`frontend/`) has been removed; `client/` was the served application shell before `frontend-v5` superseded it.
 
 ## Routes
 
@@ -37,7 +37,7 @@ original UI).
 
 ## Live view
 
-`frontend-v2/src/views/Live/`: `LiveView.jsx` (orchestrator), `CameraTile.jsx`,
+`client/src/views/Live/`: `LiveView.jsx` (orchestrator), `CameraTile.jsx`,
 `FocusedPlayer.jsx`, `AnalyticsToggle.jsx`, plus `hooks/useHlsPlayer.js` and
 `hooks/useVisibility.js`.
 
@@ -80,7 +80,7 @@ gateway's `cookieCheck` cookie (set on the first redirect) is still present
 on later segment requests, and caches each camera's `hls_url` in memory
 after the first DB lookup — the sandbox streams are low-latency HLS with
 ~0.3s parts, and a DB round trip on every single part request is latency
-that window can't spare. `frontend-v2/src/api.js`'s `hlsProxyUrl()` is the
+that window can't spare. `client/src/api.js`'s `hlsProxyUrl()` is the
 only thing that constructs the proxied URL; `CameraTile`/`FocusedPlayer`
 never reference `camera.hls_url` directly for playback.
 
