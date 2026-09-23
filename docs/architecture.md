@@ -179,7 +179,7 @@ Accepted stack; exact package sources are recorded in ADR 0002:
 - OpenCV and FFmpeg/ffprobe for capture and probing;
 - YOLO11, ByteTrack, fast-alpr, and ONNX Runtime for the current ANPR baseline;
 - PostgreSQL/PostGIS;
-- React/Vite with React Leaflet (`frontend-v3` is the served console; `frontend-v2` is retained as reference); and
+- React/Vite with React Leaflet (`frontend-v5` is the served console; `client` is a second console under active development but is not served); and
 - process-local worker supervision for the current bounded deployment.
 
 Redis/Kafka, Kubernetes, Docker Compose, and S3-compatible evidence storage are **not** current dependencies. They remain possible scale choices only after measurements and retention requirements justify them.

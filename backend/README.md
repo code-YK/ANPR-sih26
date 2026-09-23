@@ -4,7 +4,7 @@ FastAPI + PostgreSQL/PostGIS control plane for **SIH26127**. It owns the camera 
 
 Design context: [../docs/hld.md](../docs/hld.md) | [../docs/architecture.md](../docs/architecture.md) | [../docs/registry-gis-build-spec.md](../docs/registry-gis-build-spec.md)
 
-The served operator console is `frontend-v3/`. FastAPI serves its production build at `/` when `frontend-v3/dist/` exists. `frontend-v2/` is the previous console, retained as reference; `frontend/` is the original vanilla UI and is not served because it has no authentication flow.
+The served operator console is `frontend-v5/`. FastAPI serves its production build at `/` when `frontend-v5/dist/` exists. `client/` is a second console under active development and proxies `/api` here from its own dev server on port 5174, but its build is **never** mounted — see the repository [README](../README.md#which-console-is-served).
 
 ## Directory map
 
@@ -76,11 +76,11 @@ Safe to re-run: it updates metadata but deliberately **never** writes the stream
 ## Build the served frontend
 
 ```bash
-npm --prefix frontend-v3 ci
-npm --prefix frontend-v3 run build
+npm --prefix frontend-v5 ci
+npm --prefix frontend-v5 run build
 ```
 
-A successful build creates `frontend-v3/dist/`, which FastAPI serves at `/`. For hot-reload development, follow [../frontend-v3/README.md](../frontend-v3/README.md) instead.
+A successful build creates `frontend-v5/dist/`, which FastAPI serves at `/`. Building `client/` does not change what is served; run it on its own dev server (`npm --prefix client run dev`, port 5174) instead. For hot-reload development of the served console, follow [../frontend-v5/README.md](../frontend-v5/README.md).
 
 ## Run
 

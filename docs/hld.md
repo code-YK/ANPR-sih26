@@ -285,6 +285,7 @@ Stating these is part of the design, not an apology for it:
 | Face recognition | Out of scope and legally gated. Person search returns ranked appearance candidates, never an asserted identity |
 | Central video recording | Metadata-first by design; only bounded evidence crops are retained, on a short expiry |
 | Claiming >90 % OCR accuracy | Unmeasured. It stays unclaimed until ground truth exists |
+| Letting the Copilot delete or administer anything | The assistant reaches only reversible operations. Deletes, camera administration, user management and mode toggles are absent from its tool registry rather than refused at runtime, which is what lets it act without a confirmation prompt ([ADR 0005](decisions/0005-copilot-in-process-agent.md)) |
 
 ---
 
@@ -298,8 +299,9 @@ Stating these is part of the design, not an apology for it:
 | OCR | fast-alpr + ONNX Runtime (CUDA) | Purpose-built for plates; ONNX gives GPU execution without a second training stack |
 | Media | FFmpeg · MediaMTX | Real transport semantics (RTSP/HLS/WHEP), not seekable files |
 | Frontend | React 19 · Vite 8 · React Leaflet | GIS-integrated console is a stated requirement |
+| Copilot | Hosted LLM via OpenRouter (OpenAI-compatible REST over the already-pinned `httpx`) | Tool calling turns an operator request into an audited API call. Runs in-process so it inherits the caller's `AuthContext`; optional, and the console works unchanged without it ([ADR 0005](decisions/0005-copilot-in-process-agent.md)) |
 
-Pinned versions: [ADR 0002](decisions/0002-implementation-stack.md), `backend/requirements.txt`, `frontend-v3/package-lock.json`.
+Pinned versions: [ADR 0002](decisions/0002-implementation-stack.md), `backend/requirements.txt`, `frontend-v5/package-lock.json`.
 
 ---
 

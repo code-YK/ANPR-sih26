@@ -73,9 +73,8 @@ Read in this order before changing anything:
 │   ├── migrations/           Alembic migrations
 │   ├── scripts/              seeds, smoke tests, relay launchers
 │   └── fixtures/             safe synthetic + government camera fixtures
-├── frontend-v3/              React 19 + Vite operator console  ← served at /
-├── frontend-v2/              previous console, retained as reference
-├── frontend/                 original vanilla UI, unserved, historical
+├── frontend-v5/              React 19 + Vite operator console  ← served at /
+├── client/                   React 19 + Vite console, active development (port 5174, not served)
 ├── multi-object-tracking/    ANPR / person / suspicious / ingest workers (own venv)
 ├── docs/                     requirements, HLD, architecture, ADRs, testing guides
 ├── artifacts/                dated, redacted verification evidence packets
@@ -83,6 +82,10 @@ Read in this order before changing anything:
 ```
 
 Each of those directories has its own `README.md` describing its contents in depth.
+
+### Which console is served
+
+`backend/app/main.py` mounts `frontend-v5/dist` at `/`. `client/dist` is **never** mounted — `client/` is developed against its own dev server on port 5174 and proxies `/api` to the backend. Ports: `client` 5174, `frontend-v5` 5175, each fixed so it stays in the backend's CORS allowlist. Keep this in mind when a change appears in one console and not another.
 
 Three directories are **required to run the demo but deliberately not in Git** — see [SETUP.md](SETUP.md#external-assets-not-in-git):
 
@@ -100,7 +103,7 @@ Three directories are **required to run the demo but deliberately not in Git** �
 | ANPR / CV | YOLO11, ByteTrack, fast-alpr, ONNX Runtime (CUDA), OpenCV |
 | Media | FFmpeg / ffprobe, MediaMTX (RTSP/HLS/WHEP relay) |
 
-Exact pinned versions are in [docs/decisions/0002-implementation-stack.md](docs/decisions/0002-implementation-stack.md), `backend/requirements.txt`, and `frontend-v3/package-lock.json`.
+Exact pinned versions are in [docs/decisions/0002-implementation-stack.md](docs/decisions/0002-implementation-stack.md), `backend/requirements.txt`, and `frontend-v5/package-lock.json`.
 
 ## Demo and government modes
 

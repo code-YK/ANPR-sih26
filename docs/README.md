@@ -33,7 +33,7 @@ These describe how a slice was built and why. They were renamed in [ADR 0004](de
 | [registry-gis-build-spec.md](registry-gis-build-spec.md) | Camera registry, onboarding paths, PostGIS layer, gap analysis |
 | [anpr-pipeline-build-spec.md](anpr-pipeline-build-spec.md) | Observation → watchlist match → alert → journey pipeline |
 | [operator-console-build-spec.md](operator-console-build-spec.md) | Operator console views and their API contracts |
-| [frontend-v3-design.md](frontend-v3-design.md) | The served console's design direction |
+| [frontend-v3-design.md](frontend-v3-design.md) | Design direction, written for `frontend-v3`; `frontend-v5` is now the served console |
 
 ### Operations and testing
 

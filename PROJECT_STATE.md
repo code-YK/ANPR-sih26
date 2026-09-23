@@ -17,12 +17,12 @@ This is the smallest canonical snapshot of the project. Update it in any PR that
 
 ## Status
 
-- **Phase:** a working vertical slice is merged — camera registry → live feed → ANPR → sighting → watchlist alert → cross-camera trajectory on a GIS map — with an authenticated operator console, department-scoped RBAC, and an audit trail. Of the four expected components, 1, 2 and 4 have working implementations with open accuracy/coverage gaps; component 3 (traffic analytics dashboard) is built but **unmerged**.
-- **Branch:** `main`.
+- **Phase:** a working vertical slice is merged — camera registry → live feed → ANPR → sighting → watchlist alert → cross-camera trajectory on a GIS map — with an authenticated operator console, department-scoped RBAC, and an audit trail. Of the four expected components, 1, 2 and 4 have working implementations with open accuracy/coverage gaps; component 3 (traffic analytics dashboard) is built but **unmerged**. A conversational assistant over the existing API (`SIH-PLAT-011`, Bonus) is also built and **unmerged**.
+- **Branch:** `main`. Unmerged work lives on `new-implementations` (traffic analytics) and `feat/copilot-agent` (the assistant).
 - **Application code:**
   - `backend/` — FastAPI + PostgreSQL/PostGIS control plane; supervises analytics subprocesses and local MediaMTX relays.
-  - `frontend-v3/` — React 19 + Vite operator console, **the served UI** (`backend/app/main.py` mounts `frontend-v3/dist` at `/`).
-  - `frontend-v2/` — previous console, retained as reference, still runnable on port 5173.
+  - `frontend-v5/` — React 19 + Vite operator console, **the served UI** (`backend/app/main.py` mounts `frontend-v5/dist` at `/`). Dev server on port 5175.
+  - `client/` — a second React 19 + Vite console under active development on port 5174. It proxies `/api` to the backend but **its build is never served** — `main.py` does not list `client/dist`. Two consoles are maintained in parallel; a feature added to one does not appear in the other, which has already caused confusion. Which becomes canonical is an open decision.
   - `multi-object-tracking/` — ANPR, person-count, suspicious-activity, and offline recording-ingest workers, plus person-appearance embedding. Own virtualenv and GPU stack.
 - **Database:** hosted PostgreSQL 18.6 + PostGIS 3.6.4 (Neon, `ap-southeast-1`). The direct endpoint is used deliberately, not the pooler — PgBouncer transaction pooling breaks asyncpg prepared statements. Swapping back to a local Postgres is a two-line `.env` change; nothing in the code hard-codes a DSN.
 - **Alembic head:** `202608312000`. Note the shared database was stamped back to this from `202609101000` on 2026-09-12 so `main` could migrate; see *Open decisions*.
@@ -57,13 +57,15 @@ In priority order:
 
 Accepted: a **modular monolith** for registry, watchlists, alerts, trajectories, RBAC, and API, with **independent media/analytics workers** and a replaceable source-connector boundary. See [docs/hld.md](docs/hld.md) and [docs/architecture.md](docs/architecture.md).
 
-Decision records: [ADR 0001](docs/decisions/0001-integration-shape.md), [ADR 0002](docs/decisions/0002-implementation-stack.md), [ADR 0003](docs/decisions/0003-department-rbac.md), [ADR 0004](docs/decisions/0004-sih26127-rescope.md).
+Decision records: [ADR 0001](docs/decisions/0001-integration-shape.md), [ADR 0002](docs/decisions/0002-implementation-stack.md), [ADR 0003](docs/decisions/0003-department-rbac.md), [ADR 0004](docs/decisions/0004-sih26127-rescope.md), [ADR 0005](docs/decisions/0005-copilot-in-process-agent.md).
 
 ## Open decisions
 
 | Decision | Owner | Status |
 |---|---|---|
 | Replace the inherited presentation deck with an SIH26127 one | Team | **Open** — the committed `Sentinel-Gujarat-*.pptx` files are from the previous programme and are not valid for this submission |
+| Which operator console is canonical — `frontend-v5/` or `client/` | Team | **Open** — both are actively developed React 19 + Vite consoles, but only `frontend-v5/dist` is mounted at `/`; `client/` exists only behind its own dev server. Maintaining both doubles every UI change and has already produced a feature that appeared in one console and not the other. Pick one, or state explicitly why two are kept |
+| Merge `feat/copilot-agent` (conversational assistant) into `main` | Team | **Open** — implemented for both consoles with 76 backend tests and measured tool/behaviour evidence ([ADR 0005](docs/decisions/0005-copilot-in-process-agent.md), `SIH-PLAT-011`). Neither panel has been exercised in a signed-in browser, and prompt-injection resistance is unproven |
 | Merge `new-implementations` (traffic analytics) into `main` | Team | **Open** — its migration `202609101000` uses bare `op.create_index` and will fail against the shared database, whose indexes already exist. Add `if_not_exists`, or stamp forward. The branch has never run against Postgres |
 | Obtain or produce ground-truth labelled footage for OCR accuracy | Team | **Open** — blocks `SIH-OCR-002`, the headline requirement |
 | Camera calibration for per-camera speed | Team | **Open** — without homography/PTZ handling, only corridor lower-bound speed is honest. This is a deployment input, not a code change |
