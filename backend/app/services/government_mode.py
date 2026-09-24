@@ -223,15 +223,40 @@ async def _repair(session: AsyncSession, state: dict, actor=None) -> list[str]:
 
     The relay being fine does not mean the DB still points at it either --
     see _mismatched_cameras -- so any camera that drifted is re-pointed too.
+
+    This also adopts cameras onboarded *after* the mode was first enabled: any
+    camera that now has a recording on the relay but is not yet in the state
+    file gets re-pointed and tracked here. Without it, a camera added while
+    government mode is on has a live relay feed the DB never points at, so the
+    Live view shows it as "No stream endpoint" until a full off/on toggle.
     """
     await asyncio.to_thread(_start_relay)
 
-    mismatched = await _mismatched_cameras(session, state)
-    if mismatched:
-        for camera_id, camera in mismatched.items():
-            camera.hls_url = _relay_hls_url(camera_id)
-            camera.rtsp_url = _relay_rtsp_url(camera_id)
-            session.add(camera)
+    # State-tracked cameras plus any newly-discovered recording's camera.
+    candidate_ids = set(state.get("cameras", {})) | set(_discover_recordings())
+    if not candidate_ids:
+        return []
+    rows = (
+        await session.execute(select(Camera).where(Camera.camera_id.in_(candidate_ids)))
+    ).scalars().all()
+
+    repointed: list[str] = []
+    for camera in rows:
+        if camera.hls_url == _relay_hls_url(camera.camera_id):
+            continue  # already pointed at the relay -- nothing to fix
+        # First time this mode touches a camera, remember its real URLs so
+        # disable() can restore them. setdefault keeps an already-saved
+        # original intact (a drifted camera we first pointed earlier).
+        state.setdefault("cameras", {}).setdefault(
+            camera.camera_id, {"hls_url": camera.hls_url, "rtsp_url": camera.rtsp_url}
+        )
+        camera.hls_url = _relay_hls_url(camera.camera_id)
+        camera.rtsp_url = _relay_rtsp_url(camera.camera_id)
+        session.add(camera)
+        repointed.append(camera.camera_id)
+
+    if repointed:
+        _save_gov_state(state)
         add_audit_event(
             session,
             actor=actor,
@@ -240,10 +265,10 @@ async def _repair(session: AsyncSession, state: dict, actor=None) -> list[str]:
             target_type="government_mode",
             target_id="singleton",
             result="success",
-            details={"camera_ids": list(mismatched)},
+            details={"camera_ids": repointed},
         )
         await session.commit()
-    return list(mismatched)
+    return repointed
 
 
 async def repair_on_startup() -> None:

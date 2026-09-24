@@ -77,17 +77,23 @@ def rtsp_url(camera_id: str) -> str:
     return f"rtsp://127.0.0.1:{RTSP_PORT}/{path_name(camera_id)}"
 
 
-def discover_recordings() -> dict[str, str]:
-    """camera_id -> absolute .mp4 path, one per camera, for every completed
-    (has a .json sidecar) recording anywhere under recorded-streams/,
-    including subdirectories -- an operator dropping a batch of clips into
-    their own subfolder (e.g. "newly added clips/") shouldn't have to flatten
-    them into the top level first. When the same camera_id has more than one,
-    the sidecar's own recorded_at_utc picks the most recent -- an operator
-    re-recording a bad take shouldn't have to delete the old file first."""
+def discover_recordings() -> dict[str, tuple[str, float]]:
+    """camera_id -> (absolute .mp4 path, start_offset_seconds), one per camera,
+    for every completed (has a .json sidecar) recording anywhere under
+    recorded-streams/, including subdirectories -- an operator dropping a batch
+    of clips into their own subfolder (e.g. "newly added clips/") shouldn't have
+    to flatten them into the top level first. When the same camera_id has more
+    than one, the sidecar's own recorded_at_utc picks the most recent -- an
+    operator re-recording a bad take shouldn't have to delete the old file
+    first.
+
+    An optional "start_offset_seconds" in the sidecar makes the publisher begin
+    that many seconds into the clip (ffmpeg -ss). Several cameras re-onboarding
+    the same physical clip (via "clip_path") can each pick their own offset so a
+    multi-stop journey demo does not play frame-aligned across the stops."""
     if not os.path.isdir(_RECORDING_DIR):
         return {}
-    best: dict[str, tuple[str, str]] = {}  # camera_id -> (recorded_at_utc, clip_path)
+    best: dict[str, tuple[str, str, float]] = {}  # camera_id -> (recorded_at_utc, clip_path, start_offset)
     for root, dirs, files in os.walk(_RECORDING_DIR):
         # Never descend into the relay's own runtime state dir (pid files,
         # generated mediamtx.yml, ffmpeg logs) looking for recordings.
@@ -118,10 +124,14 @@ def discover_recordings() -> dict[str, str]:
             if not os.path.isfile(clip_path):
                 continue
             recorded_at = meta.get("recorded_at_utc", "")
+            try:
+                start_offset = max(0.0, float(meta.get("start_offset_seconds") or 0))
+            except (TypeError, ValueError):
+                start_offset = 0.0
             current = best.get(camera_id)
             if current is None or recorded_at > current[0]:
-                best[camera_id] = (recorded_at, clip_path)
-    return {camera_id: clip_path for camera_id, (_, clip_path) in best.items()}
+                best[camera_id] = (recorded_at, clip_path, start_offset)
+    return {camera_id: (clip_path, offset) for camera_id, (_, clip_path, offset) in best.items()}
 
 
 def _mediamtx_config() -> str:
@@ -143,7 +153,15 @@ hlsAddress: 127.0.0.1:{HLS_PORT}
 hlsAllowOrigins: ["*"]
 hlsVariant: mpegts
 hlsSegmentCount: 7
-hlsSegmentDuration: 1s
+# 4s (not 1s) segments: a browser opens ~6 connections per origin, and every
+# live tile pulls its playlist + segments through this one relay. At 1s each
+# tile fetched a segment every second, so a wall of ~12 tiles issued ~24
+# requests/s into a 6-connection pipe -- segments then took longer than
+# realtime to arrive and every player perpetually re-buffered. 4s segments cut
+# that request rate ~4x and hand each player a bigger buffer per fetch, so a
+# full 12-tile wall stays smooth. Latency rises a few seconds, which does not
+# matter for recorded footage that is looped anyway.
+hlsSegmentDuration: 4s
 
 api: yes
 apiAddress: 127.0.0.1:{API_PORT}
@@ -194,13 +212,18 @@ def _alive(pid: int) -> bool:
         return False
 
 
-def _spawn_publisher(camera_id: str, clip_path: str) -> int:
+def _spawn_publisher(camera_id: str, clip_path: str, start_offset: float = 0.0) -> int:
     log_path = os.path.join(_STATE_DIR, f"ffmpeg-{camera_id}.log")
     log_file = open(log_path, "ab")  # noqa: SIM115 - lives for the subprocess's lifetime
+    # -ss before -i seeks the input to that offset (accurate, and cheap with
+    # -c copy since it lands on the nearest keyframe). It applies to the first
+    # read only; each -stream_loop pass after that restarts from 0, which is
+    # fine -- the point is just to start the stops out of frame-lockstep.
+    seek = ["-ss", f"{start_offset:g}"] if start_offset > 0 else []
     proc = subprocess.Popen(
         [
             "ffmpeg", "-nostdin", "-loglevel", "warning",
-            "-stream_loop", "-1", "-re", "-i", clip_path,
+            "-stream_loop", "-1", *seek, "-re", "-i", clip_path,
             "-c", "copy", "-f", "rtsp", "-rtsp_transport", "tcp",
             rtsp_url(camera_id),
         ],
@@ -255,14 +278,15 @@ def cmd_start(_args) -> int:
         print(f"mediamtx started (pid={proc.pid})")
         _wait_for_api()
 
-    for camera_id, clip_path in recordings.items():
+    for camera_id, (clip_path, start_offset) in recordings.items():
         if camera_id in pids and _alive(pids[camera_id]):
             print(f"[{camera_id}] already publishing")
             continue
-        pid = _spawn_publisher(camera_id, clip_path)
+        pid = _spawn_publisher(camera_id, clip_path, start_offset)
         pids[camera_id] = pid
         _save_pids(pids)
-        print(f"[{camera_id}] publishing {os.path.basename(clip_path)} (pid={pid}) -> {hls_url(camera_id)}")
+        at = f" @ +{start_offset:g}s" if start_offset else ""
+        print(f"[{camera_id}] publishing {os.path.basename(clip_path)}{at} (pid={pid}) -> {hls_url(camera_id)}")
 
     print("\nwaiting for all paths to go ready...")
     deadline = time.monotonic() + 20.0

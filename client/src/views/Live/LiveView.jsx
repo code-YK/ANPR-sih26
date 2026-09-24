@@ -15,10 +15,16 @@ import FocusedPlayer from "./FocusedPlayer.jsx";
 import WorkspaceDock from "./WorkspaceDock.jsx";
 
 // GOV-ING-012: every connected player is a separate stream copy on the
-// gateway. Keep the operator choice bounded; this is a preview budget, not
-// the separate, GPU-bound analytics-worker limit.
-const STREAM_LIMITS = [1, 3, 6, 9, 12];
-const DEFAULT_STREAM_LIMIT = 9;
+// gateway, and each live tile is its own hls.js instance + MSE decoder, so
+// this bounds both gateway and browser cost (tiles past the budget show a
+// crisp captured still and play on hover/focus). A full 12-tile wall stays
+// smooth now that the recorded-feed relay uses 4s HLS segments (see
+// government_feed_relay.py) -- at 1s segments a wall of this size issued more
+// requests than a browser's ~6-connection-per-origin limit could serve, and
+// every player perpetually re-buffered. Infinity ("All") lifts the cap
+// entirely; opt-in, since ~19 simultaneous decoders can still tax a weak GPU.
+const STREAM_LIMITS = [1, 3, 6, 9, 12, Infinity];
+const DEFAULT_STREAM_LIMIT = 12;
 const STREAM_LIMIT_STORAGE_KEY = "sentinel-live-stream-limit";
 const VIEW_MODE_STORAGE_KEY = "sentinel-live-view-mode";
 const VIEW_MODES = ["grid", "list", "compact"];
@@ -349,11 +355,6 @@ export default function LiveView() {
                 {atCap ? " · preview cap reached" : ""}
               </p>
             </div>
-            {governmentModeOn && (
-              <button type="button" className="live-gov-badge" title="Showing catalogue cameras from government relay">
-                Recorded government footage
-              </button>
-            )}
           </header>
 
           <div className="live-filters">
@@ -411,7 +412,7 @@ export default function LiveView() {
                 <span>Live previews</span>
                 <select value={streamLimit} onChange={(e) => setStreamLimit(Number(e.target.value))}>
                   {STREAM_LIMITS.map((limit) => (
-                    <option key={limit} value={limit}>{limit}</option>
+                    <option key={limit} value={limit}>{Number.isFinite(limit) ? limit : "All"}</option>
                   ))}
                 </select>
               </label>

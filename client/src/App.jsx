@@ -362,8 +362,7 @@ function AuthenticatedShell() {
                         <span className="theme-toggle-label">Top bar</span>
                       </button>
                       <SoundToggle />
-                      <SoundToggle />
-                    <ThemeToggle />
+                      <ThemeToggle />
                       <ColorSwitch />
                       <button type="button" className="secondary rail-signout" onClick={logout} title="Sign out">
                         <LogOut size={16} strokeWidth={2} />
