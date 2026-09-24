@@ -9,6 +9,7 @@ fallback.
 import asyncio
 import json
 import logging
+import subprocess
 from datetime import datetime, timezone
 from fractions import Fraction
 
@@ -40,11 +41,16 @@ async def _ffprobe(url: str, *, rtsp: bool, timeout_seconds: float) -> dict | No
     args.append(url)
 
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        # asyncio.to_thread + a blocking subprocess.run, never
+        # asyncio.create_subprocess_exec (AGENTS.md, docs/platform-notes.md):
+        # on a Windows SelectorEventLoop the latter raises a bare
+        # NotImplementedError, which reached operators as a message-less 500
+        # from "Probe stream now". subprocess.run also kills ffprobe when the
+        # timeout expires; the old wait_for timeout left the child running.
+        proc = await asyncio.to_thread(
+            subprocess.run, args, capture_output=True, timeout=timeout_seconds + 5
         )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_seconds + 5)
-    except asyncio.TimeoutError:
+    except subprocess.TimeoutExpired:
         logger.info("ffprobe timed out for %s transport", "RTSP" if rtsp else "HLS")
         return None
 
@@ -57,7 +63,7 @@ async def _ffprobe(url: str, *, rtsp: bool, timeout_seconds: float) -> dict | No
         return None
 
     try:
-        data = json.loads(stdout)
+        data = json.loads(proc.stdout)
     except json.JSONDecodeError:
         return None
 

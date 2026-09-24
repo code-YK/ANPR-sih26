@@ -1,4 +1,4 @@
-import { NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 
 import { usePageTitle } from "../../hooks/usePageTitle.js";
 import CameraListView from "./CameraListView.jsx";
@@ -45,6 +45,9 @@ export default function RegistryView() {
         <Route path="map" element={<MapView />} />
         <Route path="gap-analysis" element={<GapAnalysisView />} />
         <Route path="health-history" element={<HealthHistoryView />} />
+        {/* An unknown sub-path goes back to this section's index instead of
+            rendering an empty page under a valid header. */}
+        <Route path="*" element={<Navigate to="/registry" replace />} />
       </Routes>
     </section>
   );

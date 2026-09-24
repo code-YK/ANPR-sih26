@@ -8,6 +8,7 @@ that -- it reports the local encoder's properties, not the camera's.
 import asyncio
 import logging
 import os
+import subprocess
 
 from app.config import get_settings
 from app.models.camera import Camera
@@ -22,11 +23,11 @@ async def _ffmpeg_grab(url: str, out_path: str, *, rtsp: bool, timeout_seconds: 
     args += ["-i", url, "-frames:v", "1", out_path]
 
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
-        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_seconds)
-    except asyncio.TimeoutError:
+        # Same reason as probe.py: to_thread(subprocess.run), never
+        # asyncio.create_subprocess_exec, which a Windows SelectorEventLoop
+        # does not implement (AGENTS.md, docs/platform-notes.md).
+        proc = await asyncio.to_thread(subprocess.run, args, capture_output=True, timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
         logger.info("ffmpeg frame capture timed out for %s transport", "RTSP" if rtsp else "HLS")
         if os.path.exists(out_path):
             os.remove(out_path)

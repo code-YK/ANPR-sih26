@@ -314,6 +314,16 @@ def main():
                     # the difference between "working on it" and "idle".
                     "plates_reading": sum(1 for v in plate_views.values()
                                           if v["text"] and not v["confirmed"]),
+                    # Per-vehicle read progress for the console's model view:
+                    # which vehicles are being read right now and how far each
+                    # vote has got. Bounded to the vehicles in this frame (see
+                    # PlateReader.progress) so the status file stays small at
+                    # its several-times-a-second cadence. Tentative rows are
+                    # labelled as such and are never sightings.
+                    "plate_min_votes": plate_reader.min_votes,
+                    "plates_live": plate_reader.progress(
+                        track_ids, class_names=[vehicle_classes.get(c) for c in class_ids],
+                    ),
                     "alerts_raised": accepted_alerts,
                     "time_anchored": seen_at is not None,
                     "source_transport": reader.transport,

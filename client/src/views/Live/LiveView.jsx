@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ChevronLeft, ChevronRight, LayoutGrid, List, Rows3, Search } from "lucide-react";
 
 import { api } from "../../api.js";
@@ -8,9 +8,10 @@ import { useDepartments } from "../../context/DepartmentsContext.jsx";
 import { usePageTitle } from "../../hooks/usePageTitle.js";
 import { useGsapReveal } from "../../hooks/useGsapReveal.js";
 import { usePolling } from "../../hooks/usePolling.js";
+import { useAnalyticsStatus } from "../../lib/analyticsStatus.js";
 import CameraTile from "./CameraTile.jsx";
+import DetectorWorkbench from "./DetectorWorkbench.jsx";
 import FocusedPlayer from "./FocusedPlayer.jsx";
-import InferenceSidebar from "./InferenceSidebar.jsx";
 import WorkspaceDock from "./WorkspaceDock.jsx";
 
 // GOV-ING-012: every connected player is a separate stream copy on the
@@ -21,6 +22,11 @@ const DEFAULT_STREAM_LIMIT = 9;
 const STREAM_LIMIT_STORAGE_KEY = "sentinel-live-stream-limit";
 const VIEW_MODE_STORAGE_KEY = "sentinel-live-view-mode";
 const VIEW_MODES = ["grid", "list", "compact"];
+// Other cameras playing live under a focused one: enough that the strip reads
+// as live without hovering, few enough to leave the media origin room for the
+// focused feed and the detector stream.
+const STRIP_LIVE_MAX = 3;
+const STRIP_HEAD_START_MS = 3000;
 
 function initialStreamLimit() {
   const stored = Number(window.localStorage.getItem(STREAM_LIMIT_STORAGE_KEY));
@@ -34,16 +40,23 @@ function initialViewMode() {
 
 export default function LiveView() {
   usePageTitle("Live");
-  const { cameras, refresh } = useCameras();
+  const { cameras, loading: camerasLoading, refresh } = useCameras();
   const { names: departments } = useDepartments();
   const [query, setQuery] = useState("");
   const [dept, setDept] = useState("");
   const [quickFilter, setQuickFilter] = useState("all"); // all | ai | plate
-  const [focusedId, setFocusedId] = useState(null);
+  // Focus is a route, not component state: /live/cam11 is a link an operator
+  // can send to a colleague, the browser's Back button leaves the camera
+  // instead of the whole wall, and a reload comes back to the same feed. It
+  // was state, and all three of those were broken.
+  const { cameraId: focusedId = null } = useParams();
+  const navigate = useNavigate();
   const [visibleIds, setVisibleIds] = useState(() => new Set());
-  const [recentSightings, setRecentSightings] = useState([]);
-  const [detectorMode, setDetectorMode] = useState("vehicle");
-  const [detectorRestartKey, setDetectorRestartKey] = useState(0);
+  // The focused player's own distance from the live edge (hls.js `.latency`),
+  // lifted out of the player so the detector's telemetry can be shown against
+  // it: the worker and the browser read the same stream over two independent
+  // connections, and which of the two is behind is a different problem each way.
+  const [playerLatency, setPlayerLatency] = useState(null);
   const [streamLimit, setStreamLimit] = useState(initialStreamLimit);
   const [viewMode, setViewMode] = useState(initialViewMode);
   const [demoModeOn, setDemoModeOn] = useState(false);
@@ -107,6 +120,20 @@ export default function LiveView() {
     return result;
   }, [cameras, query, dept, quickFilter, demoModeOn, governmentModeOn, governmentCameraIds]);
 
+  // What the wall shows with no search or filters -- demo/government mode's
+  // curation still applies. The empty state counts against this, not against
+  // the whole registry: a camera government mode hides is not one the
+  // operator's search hid, and "Clear filters" will not bring it back.
+  const unfilteredCount = useMemo(
+    () =>
+      cameras.filter((c) => {
+        if (demoModeOn && !c.camera_id.startsWith("manual-")) return false;
+        if (governmentModeOn && c.camera_id.startsWith("manual-")) return false;
+        return true;
+      }).length,
+    [cameras, demoModeOn, governmentModeOn],
+  );
+
   const focusedCamera = cameras.find((c) => c.camera_id === focusedId) ?? null;
   const focusedHasStream = Boolean(
     focusedCamera?.webrtc_preview_available || focusedCamera?.stream_available
@@ -119,29 +146,39 @@ export default function LiveView() {
   // max_concurrent_vehicle_workers -- demo default 3, production-safe
   // default 1; see backend/app/config.py), so changing focus is purely a
   // viewing choice and must not touch analytics_enabled on the camera
-  // being left. The toggle control still only lives on the focused
-  // camera's side panel (see AnalyticsToggle below) -- an operator builds
-  // up the enabled set by focusing each camera in turn and switching it
-  // on, and turns one off the same way, rather than every tile carrying
-  // its own control.
-  const changeFocus = useCallback((nextId) => {
-    setFocusedId(nextId);
-  }, []);
+  // being left. Starting and stopping a detector lives in the focused
+  // camera's own detector workbench -- an operator builds up the running set
+  // by focusing each camera in turn, rather than every tile in the wall
+  // carrying its own control.
+  const changeFocus = useCallback(
+    (nextId) => {
+      navigate(nextId ? `/live/${encodeURIComponent(nextId)}` : "/live");
+    },
+    [navigate],
+  );
 
-  // Starting ANPR must put the newly-started vehicle detector in view. If
-  // the operator previously inspected person/suspicious output, leaving that
-  // mode selected made the ANPR panel look blank until they clicked Vehicle
-  // themselves. The key also discards any stale "no output" state from the
-  // previous attempt and immediately reconnects the detector view.
-  const showVehicleDetector = useCallback(() => {
-    setDetectorMode("vehicle");
-    setDetectorRestartKey((key) => key + 1);
-  }, []);
-  // Same reasoning, for the fine-tuned checkpoint's own telemetry mode.
-  const showVehicleFinetunedDetector = useCallback(() => {
-    setDetectorMode("vehicle_finetuned");
-    setDetectorRestartKey((key) => key + 1);
-  }, []);
+  // ← / → move between cameras while one is focused, in the wall's current
+  // order -- the same keys frontend-v5 uses. Not while typing, not while a
+  // dialog or the detector sheet is open (the sheet owns the keyboard: Esc
+  // closes it), and not inside a tab list, where arrows move between tabs.
+  useEffect(() => {
+    if (!focusedId) return undefined;
+    function onKey(event) {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(target.tagName))) return;
+      if (target instanceof HTMLElement && target.closest('[role="tablist"], [role="menu"]')) return;
+      if (document.querySelector("dialog[open], .dw-ai[data-sheet]")) return;
+      const index = filtered.findIndex((c) => c.camera_id === focusedId);
+      const next = filtered[index + (event.key === "ArrowRight" ? 1 : -1)];
+      if (index < 0 || !next) return;
+      event.preventDefault();
+      changeFocus(next.camera_id);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [focusedId, filtered, changeFocus]);
 
   const handleVisibilityChange = useCallback((cameraId, visible) => {
     setVisibleIds((prev) => {
@@ -155,51 +192,37 @@ export default function LiveView() {
   }, []);
 
   const [activeIds, setActiveIds] = useState(() => new Set());
+  // Head start for the focused camera before the strip goes live (see the
+  // budget effect below). Reset whenever focus moves.
+  const [stripWarm, setStripWarm] = useState(false);
+  useEffect(() => {
+    setStripWarm(false);
+    if (!focusedId) return undefined;
+    const id = setTimeout(() => setStripWarm(true), STRIP_HEAD_START_MS);
+    return () => clearTimeout(id);
+  }, [focusedId]);
   const stripIdsKey = stripCameras.map((c) => c.camera_id).join(",");
 
-  // One bulk poll drives both the toolbar's "N of M running" summary and
-  // each tile's status dot -- polling GET /analytics/status/:camera_id per
-  // visible tile instead would mean one request per camera every 5s.
-  const [analyticsStatus, setAnalyticsStatus] = useState([]);
-  const [vehicleCapacity, setVehicleCapacity] = useState(null);
-  const [vehicleFinetunedCapacity, setVehicleFinetunedCapacity] = useState(null);
+  // The wall, the tiles' dots, the dock, the top bar and the status strip all
+  // read one shared poll of /analytics/status (see lib/analyticsStatus.js).
+  // They each used to run their own timer against the same endpoint, which is
+  // four redundant requests every few seconds on the origin the detector
+  // stream and every other poll already contend for.
+  const { rows: analyticsStatus } = useAnalyticsStatus();
 
-  useEffect(() => {
-    let cancelled = false;
-    api("/analytics/capacity")
-      .then((c) => {
-        if (!cancelled) {
-          setVehicleCapacity(c.vehicle);
-          setVehicleFinetunedCapacity(c.vehicle_finetuned);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  usePolling(async () => {
-    try {
-      setAnalyticsStatus(await api("/analytics/status"));
-    } catch {
-      // a failed poll just tries again next tick
-    }
-  }, 5000);
-
+  // A tile's dot shows whichever vehicle-family detector this camera is
+  // running: the two are mutually exclusive per camera, so at most one matches.
   const vehicleStatusByCameraId = useMemo(() => {
     const map = new Map();
     for (const entry of analyticsStatus) {
-      if (entry.mode === "vehicle") map.set(entry.camera_id, entry);
+      if (entry.mode === "vehicle" || entry.mode === "vehicle_finetuned") {
+        const existing = map.get(entry.camera_id);
+        if (!existing || existing.state !== "running") map.set(entry.camera_id, entry);
+      }
     }
     return map;
   }, [analyticsStatus]);
-  const vehicleRunningCount = analyticsStatus.filter((e) => e.mode === "vehicle" && e.state === "running").length;
-  const vehicleQueuedCount = analyticsStatus.filter((e) => e.mode === "vehicle" && e.state === "queued").length;
-  const vehicleFinetunedRunningCount = analyticsStatus.filter(
-    (e) => e.mode === "vehicle_finetuned" && e.state === "running").length;
-  const vehicleFinetunedQueuedCount = analyticsStatus.filter(
-    (e) => e.mode === "vehicle_finetuned" && e.state === "queued").length;
+  const aiRunningCount = analyticsStatus.filter((entry) => entry.state === "running").length;
 
   useEffect(() => {
     window.localStorage.setItem(STREAM_LIMIT_STORAGE_KEY, String(streamLimit));
@@ -231,6 +254,35 @@ export default function LiveView() {
         return cam && cam.stream_available && visibleIds.has(id);
       };
 
+      // While a camera is focused, the strip gets a small live budget, and only
+      // after the focused feed and the detector stream have had a head start.
+      // Measured: with four strip tiles connecting at the same moment as the
+      // focused camera, the detector's MJPEG stream shared the media origin's
+      // six connections with them and waited 2-4s behind their segments. Once
+      // the MJPEG is connected it keeps its socket, so live strip tiles
+      // afterwards cost it nothing. Tiles beyond the budget show their last
+      // still and go live on hover.
+      if (focusedId) {
+        if (stripWarm) {
+          let stripBudget = Math.min(STRIP_LIVE_MAX, Math.max(0, budget));
+          for (const id of prev) {
+            if (stripBudget <= 0) break;
+            if (id === focusedId || next.has(id) || !streamableVisible(id)) continue;
+            next.add(id);
+            stripBudget -= 1;
+          }
+          for (const c of stripCameras) {
+            if (stripBudget <= 0) break;
+            if (next.has(c.camera_id) || !c.stream_available || !visibleIds.has(c.camera_id)) continue;
+            next.add(c.camera_id);
+            stripBudget -= 1;
+          }
+        }
+        if (prev.size === next.size && [...next].every((id) => prev.has(id))) return prev;
+        return next;
+      }
+
+
       // 1. Incumbents that are still visible keep their slots.
       for (const id of prev) {
         if (budget <= 0) break;
@@ -253,34 +305,22 @@ export default function LiveView() {
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleIds, focusedId, focusedHasStream, streamLimit, stripIdsKey]);
+  }, [visibleIds, focusedId, focusedHasStream, streamLimit, stripIdsKey, stripWarm]);
 
   const streamable = filtered.filter((c) => c.stream_available || c.webrtc_preview_available);
   const streamingCount = streamable.filter((c) => activeIds.has(c.camera_id)).length;
   const atCap = streamingCount >= streamLimit;
-  const aiRunningCount = vehicleRunningCount + vehicleFinetunedRunningCount;
 
+  // Deliberately not keyed on the focused camera. Focusing one tile used to
+  // re-run the reveal over the whole wall -- every remaining tile faded from
+  // zero opacity again, with live video inside it -- which read as the page
+  // reloading and cost a repaint of every player. The wall animates when its
+  // contents or its shape change, which is what the reveal is for.
   const gridRef = useGsapReveal(
     ".camera-tile",
     { stagger: 0.035, duration: 0.45, y: 24, scale: true },
-    [filtered.length, focusedId, viewMode]
+    [filtered.length, viewMode],
   );
-
-  useEffect(() => {
-    if (!focusedCamera) {
-      setRecentSightings([]);
-      return undefined;
-    }
-    let cancelled = false;
-    api(`/sightings?camera_id=${focusedCamera.camera_id}&limit=10`)
-      .then((data) => {
-        if (!cancelled) setRecentSightings(data);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [focusedCamera?.camera_id]);
 
   const wallClass = focusedCamera
     ? "live-strip"
@@ -301,7 +341,7 @@ export default function LiveView() {
               <p className="eyebrow">LIVE</p>
               <h2>Cameras</h2>
               <p className="live-page-sub">
-                {filtered.length} cameras
+                {camerasLoading && cameras.length === 0 ? "Loading…" : `${filtered.length} cameras`}
                 {" · "}
                 {streamingCount} of {streamable.length} previewing
                 {" · "}
@@ -410,6 +450,38 @@ export default function LiveView() {
 
           <div className="live-layout">
             <div className="live-main">
+              {/* "0 cameras" before the list has arrived, and a blank wall when a
+                  filter matches nothing, both looked like a broken estate. */}
+              {camerasLoading && cameras.length === 0 ? (
+                <div className="live-state" aria-busy="true">
+                  <h3>Loading cameras…</h3>
+                  <p>Fetching the registry for your departments.</p>
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="live-state">
+                  <h3>{unfilteredCount === 0 ? "No cameras to show" : "No cameras match these filters"}</h3>
+                  <p>
+                    {cameras.length === 0
+                      ? "Cameras appear here once they are onboarded in the Registry and granted to a department you can see."
+                      : unfilteredCount === 0
+                        ? `The current ${governmentModeOn ? "government" : "demo"} mode shows none of the ${cameras.length} cameras you can see.`
+                        : `${unfilteredCount} camera${unfilteredCount === 1 ? " is" : "s are"} hidden by the current search or filters.`}
+                  </p>
+                  {unfilteredCount > 0 && (
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => {
+                        setQuery("");
+                        setDept("");
+                        setQuickFilter("all");
+                      }}
+                    >
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+              ) : null}
               <div ref={gridRef} className={wallClass}>
                 {stripCameras.map((c) => (
                   <CameraTile
@@ -457,6 +529,7 @@ export default function LiveView() {
                   if (i > 0) changeFocus(filtered[i - 1].camera_id);
                 }}
                 aria-label="Previous camera"
+                title="Previous camera (←)"
               >
                 <ChevronLeft size={18} />
               </button>
@@ -469,52 +542,41 @@ export default function LiveView() {
                   if (i >= 0 && i < filtered.length - 1) changeFocus(filtered[i + 1].camera_id);
                 }}
                 aria-label="Next camera"
+                title="Next camera (→)"
               >
                 <ChevronRight size={18} />
               </button>
             </div>
           </header>
 
-          <div className="focused-body">
-            <div className="focused-stage">
-              <h2 className="focused-stage-label">Camera feed</h2>
-              <div className="focused-player-wrap">
-                <FocusedPlayer camera={focusedCamera} />
+          {/* The feed and the filmstrip are handed in as nodes rather than
+              rendered by the workbench, so this view keeps sole ownership of
+              the preview budget (activeIds / streamLimit above) -- the
+              workbench decides where the player sits, never whether it may
+              exist. */}
+          <DetectorWorkbench
+            camera={focusedCamera}
+            onCameraUpdated={refresh}
+            playerLatency={playerLatency}
+            stripCount={stripCameras.length}
+            feed={<FocusedPlayer camera={focusedCamera} onLatency={setPlayerLatency} />}
+            filmstrip={
+              <div className="live-strip focused-strip">
+                {stripCameras.map((c) => (
+                  <CameraTile
+                    key={c.camera_id}
+                    camera={c}
+                    active={activeIds.has(c.camera_id)}
+                    liveOnHover
+                    analyticsState={vehicleStatusByCameraId.get(c.camera_id)?.state}
+                    onFocus={changeFocus}
+                    onVisibilityChange={handleVisibilityChange}
+                    compact
+                  />
+                ))}
               </div>
-
-              <div className="focused-filmstrip">
-                <div className="focused-filmstrip-head">
-                  <span>Other cameras</span>
-                  <span className="admin-count-pill">{stripCameras.length}</span>
-                </div>
-                <div ref={gridRef} className="live-strip focused-strip">
-                  {stripCameras.map((c) => (
-                    <CameraTile
-                      key={c.camera_id}
-                      camera={c}
-                      active={activeIds.has(c.camera_id)}
-                      paused={focusedHasStream && streamLimit === 1}
-                      analyticsState={vehicleStatusByCameraId.get(c.camera_id)?.state}
-                      onFocus={changeFocus}
-                      onVisibilityChange={handleVisibilityChange}
-                      compact
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <InferenceSidebar
-              camera={focusedCamera}
-              onCameraUpdated={refresh}
-              onAnprEnabled={showVehicleDetector}
-              onAnprFinetunedEnabled={showVehicleFinetunedDetector}
-              detectorMode={detectorMode}
-              setDetectorMode={setDetectorMode}
-              detectorRestartKey={detectorRestartKey}
-              setDetectorRestartKey={setDetectorRestartKey}
-            />
-          </div>
+            }
+          />
         </div>
       )}
     </div>

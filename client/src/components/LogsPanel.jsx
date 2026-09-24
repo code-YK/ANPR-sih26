@@ -13,10 +13,24 @@ const TABS = [
   { id: "fe", label: "FE", title: "Frontend API calls" },
 ];
 
-function fmtTime(ts) {
+function fmtLogTime(ts) {
   // ts is epoch seconds (float). Show HH:MM:SS.mmm, local.
   const d = new Date(ts * 1000);
-  return d.toLocaleTimeString([], { hour12: false }) + "." + String(d.getMilliseconds()).padStart(3, "0");
+  return `${d.toLocaleTimeString([], { hour12: false })}.${String(d.getMilliseconds()).padStart(3, "0")}`;
+}
+
+// Green for a line that reports success, red for one that reports a failure,
+// by the words in the message itself. Deliberately keyed on text, not on
+// numbers, so a worker's "500 frames" is never mistaken for HTTP 500, and a
+// failure wins over a success on a line that mentions both.
+const OK_RE = /(200 ok|connected|confirmed|success|started|running|ready|resolved|ok)/i;
+const ERR_RE = /(error|exception|traceback|fail|refused|timed out|timeout|stall|unavailable|denied|unauthoris|forbidden|not found|bad gateway|internal server error|crash|rejected)/i;
+
+function logToneClass(text) {
+  if (!text) return "";
+  if (ERR_RE.test(text)) return "log-error";
+  if (OK_RE.test(text)) return "log-ok";
+  return "";
 }
 
 function levelClass(level) {
@@ -32,19 +46,6 @@ function statusClass(status) {
   if (status >= 500) return "log-error";
   if (status >= 400) return "log-warn";
   if (status >= 200 && status < 300) return "log-ok";
-  return "";
-}
-
-// Green for a line that reports success, red for one that reports a failure,
-// by the words in the message itself. Deliberately keyed on text, not on
-// numbers, so a worker's "500 frames" is never mistaken for HTTP 500.
-const OK_RE = /(200 ok|\bconnected\b|confirmed|\bsuccess|\bstarted\b|\brunning\b|\bready\b|resolved|\bok\b)/i;
-const ERR_RE = /(error|exception|traceback|\bfail|refused|timed out|\btimeout\b|stall|unavailable|denied|unauthoris|forbidden|not found|bad gateway|internal server error|\bcrash|rejected)/i;
-
-function contentClass(text) {
-  if (!text) return "";
-  if (ERR_RE.test(text)) return "log-error"; // failure wins over success
-  if (OK_RE.test(text)) return "log-ok";
   return "";
 }
 
@@ -103,13 +104,16 @@ export default function LogsPanel() {
     // switches tabs can never land in the wrong tab's buffer.
     const streamTab = tab;
     let closed = false;
+    let seq = 0;
     const es = new EventSource(url, { withCredentials: true });
     es.onopen = () => setConnected(true);
     es.onerror = () => setConnected(false); // browser auto-reconnects
     es.onmessage = (evt) => {
       if (closed) return;
       try {
-        append(streamTab, [JSON.parse(evt.data)]);
+        // Worker lines carry no id of their own, and two identical messages in
+        // one poll would otherwise collide on the same React key.
+        append(streamTab, [{ ...JSON.parse(evt.data), seq: ++seq }]);
       } catch {
         // ignore a malformed frame rather than dropping the stream
       }
@@ -176,7 +180,7 @@ export default function LogsPanel() {
               current.map((row) =>
                 tab === "fe" ? (
                   <div key={row.seq} className="logs-line">
-                    <span className="logs-ts">{fmtTime(row.ts)}</span>
+                    <span className="logs-ts">{fmtLogTime(row.ts)}</span>
                     <span className={`logs-status ${statusClass(row.status)}`}>{row.status || "ERR"}</span>
                     <span className="logs-method">{row.method}</span>
                     <span className="logs-msg">
@@ -188,8 +192,8 @@ export default function LogsPanel() {
                 ) : tab === "be" ? (
                   // An ERROR/WARNING level colours the whole line; otherwise
                   // fall back to what the message says (green ok / red failure).
-                  <div key={row.seq} className={`logs-line ${levelClass(row.level) || contentClass(row.msg)}`}>
-                    <span className="logs-ts">{fmtTime(row.ts)}</span>
+                  <div key={row.seq} className={`logs-line ${levelClass(row.level) || logToneClass(row.msg)}`}>
+                    <span className="logs-ts">{fmtLogTime(row.ts)}</span>
                     <span className="logs-level">{row.level}</span>
                     <span className="logs-msg">
                       <span className="logs-dim">{row.logger} </span>
@@ -197,8 +201,10 @@ export default function LogsPanel() {
                     </span>
                   </div>
                 ) : (
-                  <div key={`${row.ts}-${row.msg}`} className={`logs-line ${contentClass(row.msg)}`}>
-                    <span className="logs-ts">{fmtTime(row.ts)}</span>
+                  // The shared stream numbers every line, so identical
+                  // messages in the same poll no longer collide on one key.
+                  <div key={row.seq} className={`logs-line ${logToneClass(row.msg)}`}>
+                    <span className="logs-ts">{fmtLogTime(row.ts)}</span>
                     <span className="logs-source">{row.source}</span>
                     <span className="logs-msg">{row.msg}</span>
                   </div>

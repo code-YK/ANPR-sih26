@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import {
   Activity,
   Bell,
@@ -14,6 +14,8 @@ import {
   Shield,
   Sun,
   Palette,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 
 import AlertsNavBadge from "./context/AlertsNavBadge.jsx";
@@ -22,6 +24,7 @@ import { AuthProvider, isDepartmentAdmin, isSuperAdmin, useAuth } from "./contex
 import { CamerasProvider, useCameras } from "./context/CamerasContext.jsx";
 import { DepartmentsProvider } from "./context/DepartmentsContext.jsx";
 import { ThemeProvider, useTheme } from "./context/ThemeContext.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import LoadingScreen from "./components/LoadingScreen.jsx";
 import Copilot from "./components/Copilot.jsx";
 import LogsPanel from "./components/LogsPanel.jsx";
@@ -29,8 +32,8 @@ import BrandMark from "./components/BrandMark.jsx";
 import StatusStrip from "./components/StatusStrip.jsx";
 import { ToastProvider, useToast } from "./components/Toast.jsx";
 import { useFormValidationTheme } from "./hooks/useFormValidationTheme.js";
-import { usePolling } from "./hooks/usePolling.js";
-import { api } from "./api.js";
+import { useAnalyticsStatus } from "./lib/analyticsStatus.js";
+import { setSoundEnabled, useSoundEnabled } from "./lib/notifications.js";
 import AdminView from "./views/Admin/AdminView.jsx";
 import AlertsView from "./views/Alerts/AlertsView.jsx";
 import AuthView from "./views/Auth/AuthView.jsx";
@@ -43,6 +46,25 @@ import WatchlistView from "./views/Watchlist/WatchlistView.jsx";
 
 function navClass({ isActive }) {
   return isActive ? "nav-btn active" : "nav-btn";
+}
+
+// Mute for the alert and sighting sounds (lib/notifications.js). Cards still
+// appear either way; this only silences them.
+function SoundToggle() {
+  const enabled = useSoundEnabled();
+  return (
+    <button
+      type="button"
+      className="secondary theme-toggle"
+      onClick={() => setSoundEnabled(!enabled)}
+      aria-pressed={enabled}
+      title={enabled ? "Mute alert sounds" : "Turn alert sounds on"}
+      aria-label={enabled ? "Mute alert sounds" : "Turn alert sounds on"}
+    >
+      {enabled ? <Volume2 size={16} strokeWidth={2} /> : <VolumeX size={16} strokeWidth={2} />}
+      <span className="theme-toggle-label">{enabled ? "Sound" : "Muted"}</span>
+    </button>
+  );
 }
 
 function ThemeToggle() {
@@ -191,16 +213,8 @@ function userInitials(user) {
 /** Live / AI summary chip shown in the horizontal top bar (matches control-room mock). */
 function TopbarLiveStatus() {
   const { cameras } = useCameras();
-  const [aiRunning, setAiRunning] = useState(0);
-
-  usePolling(async () => {
-    try {
-      const rows = await api("/analytics/status");
-      setAiRunning(rows.filter((row) => row.state === "running" || row.running).length);
-    } catch {
-      /* keep last known */
-    }
-  }, 5000);
+  const { rows: workers } = useAnalyticsStatus();
+  const aiRunning = workers.filter((row) => row.state === "running" || row.running).length;
 
   const live = useMemo(
     () => cameras.filter((c) => c.is_live === true).length,
@@ -220,6 +234,7 @@ function TopbarLiveStatus() {
 }
 
 function AuthenticatedShell() {
+  const location = useLocation();
   const { user, logout } = useAuth();
   const canAdminister = isSuperAdmin(user) || isDepartmentAdmin(user);
   const [navLayout, setNavLayout] = useState(() => {
@@ -346,7 +361,9 @@ function AuthenticatedShell() {
                         <PanelTop size={16} strokeWidth={2} />
                         <span className="theme-toggle-label">Top bar</span>
                       </button>
-                      <ThemeToggle />
+                      <SoundToggle />
+                      <SoundToggle />
+                    <ThemeToggle />
                       <ColorSwitch />
                       <button type="button" className="secondary rail-signout" onClick={logout} title="Sign out">
                         <LogOut size={16} strokeWidth={2} />
@@ -383,18 +400,21 @@ function AuthenticatedShell() {
             </header>
 
             <main>
+              <ErrorBoundary resetKey={location.pathname}>
               <Routes>
                 <Route path="/live" element={<LiveView />} />
+                <Route path="/live/:cameraId" element={<LiveView />} />
                 <Route path="/alerts/*" element={<AlertsView />} />
                 <Route path="/journey" element={<JourneyView />} />
                 <Route path="/journey/:plate" element={<JourneyView />} />
                 <Route path="/investigate/*" element={<InvestigateView />} />
                 <Route path="/watchlist" element={<WatchlistView />} />
                 <Route path="/registry/*" element={<RegistryView />} />
-                <Route path="/admin" element={canAdminister ? <AdminView /> : <Navigate to="/live" replace />} />
+                <Route path="/admin/*" element={canAdminister ? <AdminView /> : <Navigate to="/live" replace />} />
                 <Route path="/login" element={<Navigate to="/live" replace />} />
                 <Route path="*" element={<Navigate to="/live" replace />} />
               </Routes>
+              </ErrorBoundary>
             </main>
 
             <StatusStrip />

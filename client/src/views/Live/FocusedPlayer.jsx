@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { hlsProxyUrl } from "../../api.js";
 import { useHlsPlayer } from "../../hooks/useHlsPlayer.js";
 import { useWebRtcPlayer } from "../../hooks/useWebRtcPlayer.js";
+import { getPoster, usePosterCapture } from "../../lib/posters.js";
 
 /**
  * Latency here is inherent to HLS (6-15s, driven by segment duration) and
@@ -19,11 +20,17 @@ import { useWebRtcPlayer } from "../../hooks/useWebRtcPlayer.js";
  * run at once -- that would open a second gateway connection per
  * GOV-ING-012 for no benefit once one transport is already working.
  */
-export default function FocusedPlayer({ camera }) {
+export default function FocusedPlayer({ camera, onLatency }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const [latency, setLatency] = useState(null);
   const [transport, setTransport] = useState("webrtc");
+  // Whether the <video> is actually presenting frames, from the element's own
+  // events -- the one signal that holds for both WebRTC and HLS.
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => setPlaying(false), [camera?.camera_id]);
+  usePosterCapture(videoRef, camera?.camera_id, playing);
+  const poster = camera ? getPoster(camera.camera_id) : null;
 
   useEffect(() => {
     setTransport(camera?.webrtc_preview_available ? "webrtc" : "hls");
@@ -46,17 +53,25 @@ export default function FocusedPlayer({ camera }) {
     },
   );
 
+  // `onLatency` reports the same figure outward, so the detector's own
+  // "behind live" reading can be shown against the player's. WebRTC has no
+  // equivalent estimate, so the transport that cannot measure it reports null
+  // rather than letting a stale HLS number stand in for it.
   useEffect(() => {
     if (transport !== "hls") {
       setLatency(null);
+      onLatency?.(null);
       return undefined;
     }
     const interval = setInterval(() => {
       const l = hlsRef.current?.latency;
-      if (typeof l === "number" && Number.isFinite(l)) setLatency(l);
+      if (typeof l === "number" && Number.isFinite(l)) {
+        setLatency(l);
+        onLatency?.(l);
+      }
     }, 1000);
     return () => clearInterval(interval);
-  }, [transport]);
+  }, [transport, onLatency]);
 
   if (!camera) {
     return <div className="focused-player empty">Select a camera to focus it.</div>;
@@ -77,7 +92,19 @@ export default function FocusedPlayer({ camera }) {
   return (
     <div className="focused-player">
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-      <video ref={videoRef} muted playsInline autoPlay />
+      {/* The camera's last still, held under the player until it presents a
+          frame, so opening a camera never flashes black while WebRTC
+          negotiates or HLS buffers its first segment. */}
+      {poster && !playing && <img className="focused-player-poster" src={poster.url} alt="" aria-hidden="true" />}
+      <video
+        ref={videoRef}
+        muted
+        playsInline
+        autoPlay
+        onPlaying={() => setPlaying(true)}
+        onWaiting={() => setPlaying(false)}
+        onEmptied={() => setPlaying(false)}
+      />
       <div className={transport === "webrtc" ? "transport-indicator" : "transport-indicator fallback"}>
         {transport === "webrtc" ? "webrtc" : "hls (fallback)"}
       </div>

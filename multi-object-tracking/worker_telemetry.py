@@ -31,6 +31,7 @@ import os
 import tempfile
 import threading
 import time
+from collections import Counter, defaultdict
 
 import cv2
 import numpy as np
@@ -167,6 +168,14 @@ class TelemetryWriter:
         self.frames = 0
         self.last_detection_at = None
 
+        # Counts per class, which is what an operator actually asks the wall
+        # ("how many cars?") and what the detector view's own colours already
+        # distinguish. Kept as a running tally rather than a track_id -> class
+        # dict: the tally is bounded by the number of classes, where a dict
+        # would grow for the life of a worker exactly as seen_track_ids does.
+        # A track's class is counted once, the first frame it is seen.
+        self.unique_by_class = defaultdict(int)
+
         self._last_snapshot = 0.0
         self._last_status = 0.0
 
@@ -212,6 +221,14 @@ class TelemetryWriter:
         self.frames += 1
         self.current_count = len(track_ids)
         self.peak_count = max(self.peak_count, self.current_count)
+        # Before seen_track_ids is updated: a track counts towards its class
+        # the first frame it appears and never again.
+        for track_id, cls_id in zip(track_ids, class_ids):
+            if track_id not in self.seen_track_ids:
+                self.unique_by_class[self.class_names.get(cls_id, "object")] += 1
+        self.in_frame_by_class = Counter(
+            self.class_names.get(cls_id, "object") for cls_id in class_ids
+        )
         if track_ids:
             self.seen_track_ids.update(track_ids)
             self.last_detection_at = time.time()
@@ -373,6 +390,8 @@ class TelemetryWriter:
             "last_detection_at": self.last_detection_at,
             "has_snapshot": os.path.exists(self.snapshot_path),
             "snapshot_interval_seconds": self.snapshot_every,
+            "in_frame_by_class": dict(getattr(self, "in_frame_by_class", {})),
+            "unique_by_class": dict(self.unique_by_class),
         }
         if extra:
             payload.update(extra)

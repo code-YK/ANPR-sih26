@@ -37,6 +37,8 @@ function occurrenceLabel(recording, track) {
   return `${fmtMs(track.first_ms)} into recording`;
 }
 
+const TRACK_PAGE = 60;
+
 export default function RecordingDetailView() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
@@ -50,6 +52,12 @@ export default function RecordingDetailView() {
   const [tracks, setTracks] = useState([]);
   const [activeTrack, setActiveTrack] = useState(null);
   const [lightboxTrack, setLightboxTrack] = useState(null);
+  // A run can hold hundreds of tracks, each with a thumbnail. Filtering by
+  // plate, hiding tracks the reader found nothing on, and rendering a page at a
+  // time keeps the table usable; frontend-v5's track grid does the same.
+  const [trackFilter, setTrackFilter] = useState("");
+  const [platesOnly, setPlatesOnly] = useState(false);
+  const [trackLimit, setTrackLimit] = useState(TRACK_PAGE);
   const [kind, setKind] = useState("vehicle");
   const [imgsz, setImgsz] = useState("");
   const [busy, setBusy] = useState(false);
@@ -110,6 +118,13 @@ export default function RecordingDetailView() {
   usePolling(refreshTracks, selectedRun && ACTIVE_RUN_STATUSES.has(selectedRun.status) ? 3000 : 15000, !!selectedRunId);
 
   const canOperate = recording && canAccessDepartment(user, recording.department, "operator");
+
+  const trackNeedle = trackFilter.trim().toUpperCase().replace(/\s+/g, "");
+  const filteredTracks = tracks.filter((t) => {
+    const plate = t.plate_confirmed ?? t.plate_tentative ?? "";
+    if (platesOnly && !plate) return false;
+    return !trackNeedle || plate.includes(trackNeedle);
+  });
 
   async function handleStartRun(e) {
     e.preventDefault();
@@ -235,6 +250,37 @@ export default function RecordingDetailView() {
       {selectedRun && tracks.length > 0 && (
         <>
           <h3>Tracks — run #{selectedRun.id}</h3>
+          {tracks.some((t) => t.plate_confirmed || t.plate_tentative) && (
+            <div className="investigate-toolbar" role="toolbar" aria-label="Track filters">
+              <label className="investigate-field">
+                <span>Plate</span>
+                <input
+                  type="search"
+                  value={trackFilter}
+                  onChange={(e) => {
+                    setTrackFilter(e.target.value);
+                    setTrackLimit(TRACK_PAGE);
+                  }}
+                  placeholder="Filter by plate"
+                  aria-label="Filter tracks by plate"
+                />
+              </label>
+              <label className="investigate-check">
+                <input
+                  type="checkbox"
+                  checked={platesOnly}
+                  onChange={(e) => {
+                    setPlatesOnly(e.target.checked);
+                    setTrackLimit(TRACK_PAGE);
+                  }}
+                />
+                Read plates only
+              </label>
+              <span className="hint">
+                {filteredTracks.length} of {tracks.length} track{tracks.length === 1 ? "" : "s"}
+              </span>
+            </div>
+          )}
           <table>
             <thead>
               <tr>
@@ -248,7 +294,7 @@ export default function RecordingDetailView() {
               </tr>
             </thead>
             <tbody>
-              {tracks.map((t) => (
+              {filteredTracks.slice(0, trackLimit).map((t) => (
                 <tr key={t.track_ref}>
                   <td>{t.occurrence_index}</td>
                   <td>{occurrenceLabel(recording, t)}</td>
@@ -259,11 +305,12 @@ export default function RecordingDetailView() {
                     ) : t.plate_tentative ? (
                       // Tentative here means real: the track's best read,
                       // short of plates.py's multi-frame confirmation vote.
-                      // The live pipeline never reports these at all (see
-                      // DetectorView's own note), so this is the one place
-                      // in the console a genuinely unconfirmed plate is
-                      // shown -- the worker's own "?" suffix and the dashed
-                      // treatment, exactly as DESIGN.md §5.1 describes.
+                      // Shown with the worker's own "?" suffix and the dashed
+                      // treatment, exactly as DESIGN.md §5.1 describes -- the
+                      // same grammar the live detector's "Now reading" rail
+                      // uses for a vote still in progress (see
+                      // Live/NowReading.jsx). Neither is a sighting: an
+                      // unconfirmed read never enters the observation store.
                       <CertaintyMark
                         state="inferred"
                         value={`${t.plate_tentative}?`}
@@ -302,6 +349,12 @@ export default function RecordingDetailView() {
               ))}
             </tbody>
           </table>
+          {filteredTracks.length > trackLimit && (
+            <button type="button" className="secondary investigate-more" onClick={() => setTrackLimit((n) => n + TRACK_PAGE)}>
+              Show {Math.min(TRACK_PAGE, filteredTracks.length - trackLimit)} more of {filteredTracks.length - trackLimit}
+            </button>
+          )}
+          {filteredTracks.length === 0 && <p className="hint">No tracks match this filter.</p>}
         </>
       )}
 

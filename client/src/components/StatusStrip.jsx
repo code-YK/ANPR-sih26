@@ -1,12 +1,9 @@
 import { useEffect, useState } from "react";
 
-import { api } from "../api.js";
 import { useAlerts } from "../context/AlertsContext.jsx";
 import { isSuperAdmin, useAuth } from "../context/AuthContext.jsx";
 import { useCameras } from "../context/CamerasContext.jsx";
-import { usePolling } from "../hooks/usePolling.js";
-
-const WORKER_POLL_MS = 5000;
+import { useAnalyticsStatus } from "../lib/analyticsStatus.js";
 
 // Recomputed on a timer rather than derived at render: nothing else
 // re-renders this component between polls, so without its own tick the age
@@ -26,27 +23,21 @@ function useSecondsSince(timestamp) {
  * health, worker activity, outstanding alerts, the operator's own scope,
  * and proof the console is still talking to the backend.
  *
- * Every figure here is one the API actually reports. Notably absent: a
- * "queued workers" count and a worker cap denominator -- the analytics
- * caps are server-side config and `/analytics/status` returns only started
- * workers with `queue_position` hardcoded to None, so both would be
- * invented. A console whose job is making the limits of its own knowledge
- * legible cannot open by displaying a number it made up.
+ * Every figure here is one the API actually reports, and the worker count is
+ * the shared `/analytics/status` snapshot every other surface reads (see
+ * lib/analyticsStatus.js), so the strip and the Workspace dock can never
+ * disagree. Before the first reply it shows an em-rule, not a zero: "we have
+ * not asked yet" is not "nothing is running". A console whose job is making the
+ * limits of its own knowledge legible cannot open by displaying a number it
+ * made up.
  */
 export default function StatusStrip() {
   const { cameras } = useCameras();
   const { openAlerts, lastPolledAt } = useAlerts();
   const { user } = useAuth();
-  const [workers, setWorkers] = useState(null);
-
-  usePolling(async () => {
-    try {
-      const rows = await api("/analytics/status");
-      setWorkers(rows.filter((row) => row.running).length);
-    } catch (_) {
-      setWorkers(null); // unknown, not zero -- see the em-rule below
-    }
-  }, WORKER_POLL_MS);
+  // Still "unknown, not zero" before the first reply -- see the em-rule below.
+  const { rows: workerRows, loaded: workersLoaded } = useAnalyticsStatus();
+  const workers = workersLoaded ? workerRows.filter((row) => row.running).length : null;
 
   const age = useSecondsSince(lastPolledAt);
   const live = cameras.filter((camera) => camera.is_live === true).length;

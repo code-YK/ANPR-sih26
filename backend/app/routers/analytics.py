@@ -210,6 +210,19 @@ _retry_after: dict[tuple[str, str], float] = {}
 # visible for a beat after recovery, cleared explicitly on the next failure
 # or on an operator-initiated start (see start_analytics).
 _last_error: dict[tuple[str, str], str] = {}
+# The last time a worker went away on its own, per (camera, mode).
+#
+# Until this existed, only "vehicle" and "vehicle_finetuned" could report a
+# failure to a caller, because the only synthetic status row was the queued one
+# and only those two modes queue. A person or suspicious worker that started and
+# then died -- no GPU headroom, a stream that ended, a missing checkpoint -- was
+# removed from _workers by the reaper and vanished from the API entirely, which
+# a console can only render as "never started". The operator sees a button that
+# apparently did nothing.
+#
+# Cleared when an operator starts that mode again (a new attempt supersedes the
+# old outcome) and when they stop it deliberately (a stop is not a failure).
+_last_exit: dict[tuple[str, str], dict] = {}
 
 
 def _note_worker_exit(key: tuple[str, str], ran_for: float, error: str | None = None) -> None:
@@ -291,6 +304,13 @@ def _reap_finished() -> None:
             key, ran_for,
             error=f"exited with code {handle.proc.returncode} after {ran_for:.0f}s; see {handle.log_path}",
         )
+        _last_exit[key] = {
+            "at": datetime.now(timezone.utc),
+            "exit_code": handle.proc.returncode,
+            "ran_for_seconds": round(ran_for, 1),
+            "log_path": str(handle.log_path),
+            "model": handle.model,
+        }
 
 
 def _handle_status(handle: _WorkerHandle) -> dict:
@@ -519,6 +539,7 @@ async def start_analytics(
     _failures.pop((camera_id, mode), None)
     _retry_after.pop((camera_id, mode), None)
     _last_error.pop((camera_id, mode), None)
+    _last_exit.pop((camera_id, mode), None)
     try:
         return await _start_worker(camera_id, mode, model or _DEFAULT_MODEL.get(mode, "yolo11n.pt"), session)
     except ValueError as exc:
@@ -549,6 +570,10 @@ def _stop_worker(key: tuple[str, str]) -> dict | None:
 
     status = _handle_status(handle)
     del _workers[key]
+    # An operator-initiated stop is an outcome, not a fault: drop any recorded
+    # exit so the console does not go on reporting a failure for a worker the
+    # operator themselves turned off.
+    _last_exit.pop(key, None)
     _save_manifest()
     return status
 
@@ -562,7 +587,25 @@ async def stop_analytics(
 ):
     await get_authorised_camera(session, auth, camera_id, "operator")
     status = _stop_worker((camera_id, mode))
+    # The supervisor's desired set is rebuilt from the intent column only on its
+    # next tick (~10s). Until then a camera whose intent the operator has just
+    # cleared still sits in it, and _queued_entry reports it as "queued" --
+    # the console then shows "waiting for a free worker slot" for a camera that
+    # was stopped a moment ago. Drop it now; the next tick re-derives the set
+    # from the database, so a camera whose intent is still set comes straight
+    # back and nothing can drift.
+    if mode in ("vehicle", "vehicle_finetuned"):
+        desired = _desired_list(mode)
+        if camera_id in desired:
+            desired.remove(camera_id)
     if status is None:
+        # Nothing running, but the console may still be showing this mode's
+        # last exit (see _exited_entry). Stop on it is the operator saying
+        # "I've seen it" -- clear the record so the row goes away, rather than
+        # leaving it until someone happens to start the mode again. Still a 404
+        # when there was nothing to clear, so "not running" keeps its meaning.
+        if _last_exit.pop((camera_id, mode), None) is not None:
+            return {"camera_id": camera_id, "mode": mode, "state": "dismissed", "running": False}
         raise HTTPException(status_code=404, detail=f"No {mode} analytics worker running for camera {camera_id!r}")
     return status
 
@@ -612,6 +655,47 @@ def _queued_entry(camera_id: str, mode: str = "vehicle") -> dict | None:
     }
 
 
+def _exited_entry(camera_id: str, mode: str) -> dict | None:
+    """A synthetic status row for a mode that ran on this camera and is no
+    longer running, so a worker that died is distinguishable from one that was
+    never started. Suppressed once the same key is running again, or is queued
+    (the queued row already carries the failure detail).
+
+    `state` is "failed" when the supervisor's backoff considers this a fault --
+    it exited quickly enough to count against _failures -- and "exited"
+    otherwise, which is the ordinary end of a recorded clip. The two want
+    different words in a console: one asks the operator to look at a log, the
+    other just says the stream ended.
+    """
+    key = (camera_id, mode)
+    if key in _workers:
+        return None
+    exit_info = _last_exit.get(key)
+    if exit_info is None:
+        return None
+    if mode in ("vehicle", "vehicle_finetuned") and _queued_entry(camera_id, mode) is not None:
+        return None
+    failures = _failures.get(key, 0)
+    retry_after = _retry_after.get(key)
+    return {
+        "camera_id": camera_id,
+        "mode": mode,
+        "pid": None,
+        "model": exit_info["model"],
+        "started_at": None,
+        "running": False,
+        "state": "failed" if failures else "exited",
+        "queue_position": None,
+        "exit_code": exit_info["exit_code"],
+        "log_path": exit_info["log_path"],
+        "ran_for_seconds": exit_info["ran_for_seconds"],
+        "ended_at": exit_info["at"],
+        "failure_count": failures,
+        "retry_after": datetime.fromtimestamp(retry_after, tz=timezone.utc) if retry_after else None,
+        "last_error": _last_error.get(key),
+    }
+
+
 @router.get("/analytics/capacity")
 async def analytics_capacity(_auth: AuthContext = Depends(get_current_auth)):
     """The configured concurrency ceiling for each mode, so the frontend can
@@ -642,6 +726,7 @@ async def analytics_status(
     entries += [
         e for e in (_queued_entry(cid, "vehicle_finetuned") for cid in _desired_vehicle_finetuned) if e is not None
     ]
+    entries += [e for e in (_exited_entry(cid, m) for cid, m in list(_last_exit)) if e is not None]
 
     allowed = authorised_departments(auth)
     if allowed is None:
@@ -674,6 +759,10 @@ async def analytics_status_one(
         queued = _queued_entry(camera_id, mode)
         if queued is not None:
             out.append(queued)
+    for mode in _MODES:
+        exited = _exited_entry(camera_id, mode)
+        if exited is not None:
+            out.append(exited)
     return out
 
 

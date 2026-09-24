@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { Search, Shield, UserRound } from "lucide-react";
 
 import { api } from "../../api.js";
+import { useToast } from "../../components/Toast.jsx";
 import { useAlerts } from "../../context/AlertsContext.jsx";
 import { canAccessDepartment, useAuth } from "../../context/AuthContext.jsx";
 import { usePageTitle } from "../../hooks/usePageTitle.js";
@@ -24,6 +25,11 @@ function fmtTime(iso) {
   }
 }
 
+/** "stolen_vehicle" -> "stolen vehicle": the code is for machines, the row is for people. */
+function humanize(value) {
+  return value ? String(value).replace(/_/g, " ") : "";
+}
+
 function subjectTitle(alert) {
   if (alert.plate) return alert.plate;
   return alert.label ?? "Unlabelled event";
@@ -39,7 +45,11 @@ function isSuspiciousAlert(a) {
 
 function AlertsBoard({ status }) {
   const { user } = useAuth();
-  const { openAlerts, justArrivedIds, refresh } = useAlerts();
+  const { openAlerts, justArrivedIds, lastPolledAt, refresh } = useAlerts();
+  const showToast = useToast();
+  // null = not asked yet, "error" = asked and failed. Neither is "empty": a
+  // failed fetch used to be caught and rendered as "No acknowledged alerts".
+  const [otherState, setOtherState] = useState(null);
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState("all"); // all | watchlist | suspicious
   const [otherAlerts, setOtherAlerts] = useState([]);
@@ -48,13 +58,17 @@ function AlertsBoard({ status }) {
   useEffect(() => {
     if (status === "open") return undefined;
     let cancelled = false;
+    setOtherState(null);
     (async () => {
       try {
-        const params = new URLSearchParams({ status });
+        const params = new URLSearchParams({ status, limit: "300" });
         const data = await api(`/alerts?${params.toString()}`);
-        if (!cancelled) setOtherAlerts(data);
-      } catch {
-        if (!cancelled) setOtherAlerts([]);
+        if (!cancelled) {
+          setOtherAlerts(data);
+          setOtherState("loaded");
+        }
+      } catch (error) {
+        if (!cancelled) setOtherState({ error: error.message });
       }
     })();
     return () => {
@@ -89,17 +103,22 @@ function AlertsBoard({ status }) {
     });
   }, [baseRows, query, kindFilter]);
 
+  const loading = status === "open" ? lastPolledAt == null : otherState == null;
+  const loadError = status !== "open" && otherState?.error ? otherState.error : null;
+
   async function act(alertId, action) {
     setBusyId(alertId);
     try {
       await api(`/alerts/${alertId}/${action}`, { method: "POST" });
       await refresh();
       if (status !== "open") {
-        const params = new URLSearchParams({ status });
+        const params = new URLSearchParams({ status, limit: "300" });
         setOtherAlerts(await api(`/alerts?${params.toString()}`));
       }
     } catch (e) {
-      console.error(e);
+      // This used to go to console.error only: the button re-enabled and the
+      // operator had no way to know the alert was still open.
+      showToast(`Could not ${action} the alert: ${e.message}`);
     } finally {
       setBusyId(null);
     }
@@ -144,7 +163,17 @@ function AlertsBoard({ status }) {
         </div>
       </div>
 
-      {rows.length === 0 ? (
+      {loading ? (
+        <div className="alerts-void" aria-busy="true">
+          <h2>Loading alerts…</h2>
+          <p>Asking the alert queue for the current state.</p>
+        </div>
+      ) : loadError ? (
+        <div className="alerts-void is-error" role="alert">
+          <h2>Could not load {status} alerts</h2>
+          <p>{loadError}</p>
+        </div>
+      ) : rows.length === 0 ? (
         <div className="alerts-void">
           <h2>{status === "open" ? "Queue is clear" : `No ${status} alerts`}</h2>
           <p>
@@ -171,7 +200,10 @@ function AlertsBoard({ status }) {
             <tbody>
               {rows.map((a) => {
                 const isNew = justArrivedIds?.has?.(a.id);
-                const sev = a.severity || "low";
+                // Shown as recorded: an alert with no severity has none. This
+                // used to default to "low", which told the duty desk something
+                // no one had decided.
+                const sev = a.severity || null;
                 const watchlist = isWatchlistAlert(a);
                 const conf =
                   a.match_confidence != null
@@ -179,13 +211,13 @@ function AlertsBoard({ status }) {
                     : a.confidence != null
                       ? Number(a.confidence).toFixed(2)
                       : "—";
-                const reason = a.reason_code || a.reason || "—";
+                const reason = humanize(a.reason_code || a.reason) || "—";
                 const canAct =
                   canAccessDepartment(user, a.department, "operator") &&
                   (a.status === "open" || a.status === "acknowledged");
 
                 return (
-                  <tr key={a.id} className={`alerts-row sev-${sev}${isNew ? " is-new" : ""}`}>
+                  <tr key={a.id} className={`alerts-row${sev ? ` sev-${sev}` : ""}${isNew ? " is-new" : ""}`}>
                     <td className="alerts-td-subject">
                       <div className="alerts-subject-cell">
                         <span className={`alerts-subject-icon ${watchlist ? "is-watchlist" : "is-person"}`}>
@@ -193,7 +225,7 @@ function AlertsBoard({ status }) {
                         </span>
                         {a.plate ? (
                           <Link
-                            to={`/journey/${a.plate}`}
+                            to={`/journey/${encodeURIComponent(a.plate)}`}
                             className={
                               String(a.plate).endsWith("?")
                                 ? "alerts-plate-chip alerts-plate-chip--tentative"
@@ -217,12 +249,25 @@ function AlertsBoard({ status }) {
                       </div>
                     </td>
                     <td className="alerts-td-camera">
-                      <strong>{a.camera_name || a.camera_id || "—"}</strong>
+                      <Link
+                        to={`/live/${encodeURIComponent(a.camera_id)}?ai=${watchlist ? "anpr" : "suspicious"}`}
+                        className="alerts-camera-link"
+                        title="Open this camera"
+                      >
+                        <strong>{a.camera_name || a.camera_id || "—"}</strong>
+                      </Link>
                       {a.location_text ? <span>{a.location_text}</span> : null}
                     </td>
                     <td className="alerts-td-reason">{reason}</td>
                     <td>
-                      <span className={`alerts-sev-pill sev-${sev}`}>{sev}</span>
+                      {sev ? (
+                        <span className={`alerts-sev-pill sev-${sev}`}>{sev}</span>
+                      ) : (
+                        <span className="certainty certainty-unknown">
+                          <span className="certainty-value" aria-hidden="true">—</span>
+                          <span className="certainty-label">not set</span>
+                        </span>
+                      )}
                     </td>
                     <td className="alerts-td-conf mono">{conf}</td>
                     <td className="alerts-td-time">{fmtTime(a.event_time)}</td>
@@ -309,6 +354,7 @@ export default function AlertsView() {
         <Route index element={<AlertsBoard status="open" />} />
         <Route path="acknowledged" element={<AlertsBoard status="acknowledged" />} />
         <Route path="resolved" element={<AlertsBoard status="resolved" />} />
+        <Route path="*" element={<Navigate to="/alerts" replace />} />
       </Routes>
     </section>
   );

@@ -33,6 +33,16 @@ function rankOf(hit, mode) {
 // embedding (see PersonSearchHit's backend docstring for what that score
 // does and does not mean) -- ranked candidates, not an asserted identity.
 export default function ResultsGrid({ hits, query, mode = "plate" }) {
+  // Before the empty-state return, not after it. Sitting below that branch
+  // made this a conditionally-called hook: React saw a different hook count
+  // on the render where the first results arrived, which is the "rendered
+  // more hooks than during the previous render" crash, not a style nit.
+  const gridRef = useGsapReveal(
+    ".result-card",
+    { stagger: 0.05, duration: 0.45, y: 20, scale: true },
+    [hits.length],
+  );
+
   if (hits.length === 0) {
     // DESIGN.md §7: state what was searched and the one action that fills
     // the screen, in the interface's own voice -- never a bare "no data".
@@ -54,12 +64,6 @@ export default function ResultsGrid({ hits, query, mode = "plate" }) {
   }
   const groups = [...byRecording.values()].sort(
     (a, b) => Math.max(...b.hits.map((h) => rankOf(h, mode))) - Math.max(...a.hits.map((h) => rankOf(h, mode))),
-  );
-
-  const gridRef = useGsapReveal(
-    ".result-card",
-    { stagger: 0.05, duration: 0.45, y: 20, scale: true },
-    [hits.length]
   );
 
   return (

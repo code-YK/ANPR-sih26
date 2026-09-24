@@ -47,9 +47,14 @@ export async function api(path, opts = {}) {
   try {
     resp = await fetch(API + path, { credentials: "same-origin", ...opts });
   } catch (err) {
-    // Network-level failure (server down, connection reset) -- never reached
-    // the status line, so log it distinctly as status 0.
-    recordFeLog({ method, path, status: 0, ms: Math.round(performance.now() - started), error: String(err) });
+    // A request cancelled because its view unmounted (usePolling's signal) is
+    // housekeeping, not a failure; logging it as status 0 would fill the FE tab
+    // with false network errors every time an operator changes camera.
+    if (err?.name !== "AbortError") {
+      // Network-level failure (server down, connection reset) -- never reached
+      // the status line, so log it distinctly as status 0.
+      recordFeLog({ method, path, status: 0, ms: Math.round(performance.now() - started), error: String(err) });
+    }
     throw err;
   }
   const ms = Math.round(performance.now() - started);
@@ -132,4 +137,30 @@ export function recordingMediaUrl(recordingId) {
 
 export function trackThumbUrl(runId, trackRef) {
   return `${MEDIA_ORIGIN}${API}/investigate/runs/${runId}/tracks/${trackRef}/thumb`;
+}
+
+// The detector's annotated frames, as one long-lived MJPEG stream -- on the
+// media origin, never the app origin. This is not a style preference: the
+// stream does not end while a worker runs, and on the app origin each open
+// one permanently holds one of the browser's ~6 HTTP/1.1 connections to it.
+// Measured on this console: with the stream on /api, a handful of revisits to
+// a camera left /api/auth/me unable to get a connection at all (aborted at 8s)
+// while the backend answered the same request from the shell in 0.3s -- every
+// poll queued, the detector sat on "checking", and even a page navigation
+// hung waiting for a socket. frontend-v5 has always served it from here.
+// `key` only forces a fresh connection (a new run, or a retry).
+export function mjpegUrl(cameraId, mode, key) {
+  return `${MEDIA_ORIGIN}${API}/analytics/stream/${encodeURIComponent(cameraId)}?mode=${mode}&k=${encodeURIComponent(key)}`;
+}
+
+// The evidence crop stored for a confirmed sighting. Same cross-origin-in-dev
+// reasoning as trackThumbUrl above: a plain <img src> is a browser-issued
+// subresource fetch, so api()'s credentials option never applies to it, and
+// the session cookie rides along because the two dev hosts are same-site.
+// Authorisation is rechecked server-side per request (see
+// sightings.py's /sightings/{id}/evidence), and the endpoint 404s once the
+// retention window has actually deleted the file -- so a thumbnail that fails
+// to load is a real answer, not a bug to paper over.
+export function evidenceUrl(sightingId) {
+  return `${MEDIA_ORIGIN}${API}/sightings/${sightingId}/evidence`;
 }

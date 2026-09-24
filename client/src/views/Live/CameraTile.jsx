@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Camera, Radio, WifiOff } from "lucide-react";
 
 import { hlsProxyUrl } from "../../api.js";
@@ -6,6 +6,7 @@ import { AnprBadge, LiveBadge, PlaybackBadge } from "../../components/Badge.jsx"
 import StatusDot from "../../components/StatusDot.jsx";
 import { useHlsPlayer } from "../../hooks/useHlsPlayer.js";
 import { useVisibility } from "../../hooks/useVisibility.js";
+import { getPoster, usePosterCapture } from "../../lib/posters.js";
 
 function tileTone({ streamAvailable, active, focused, stalled, playbackState, isLive }) {
   if (focused) return "tone-focus";
@@ -44,9 +45,13 @@ function TileStage({ variant, icon, title, detail, compact }) {
   );
 }
 
+// Hover intent for `liveOnHover` tiles: sweeping the pointer across a strip
+// must not spin up (and tear down) a stream for every tile it passes over.
+const HOVER_INTENT_MS = 450;
+
 export default function CameraTile({
   camera,
-  active,
+  active: activeProp,
   focused,
   paused,
   analyticsState,
@@ -54,9 +59,30 @@ export default function CameraTile({
   onVisibilityChange,
   compact = false,
   listMode = false,
+  liveOnHover = false,
 }) {
   const videoRef = useRef(null);
   const [visRef, visible] = useVisibility();
+  // A `liveOnHover` tile shows a still and holds no connection until the
+  // operator lingers on it -- the focused view's filmstrip, where every tile
+  // playing at once starved the focused feed and the detector stream of the
+  // media origin's connections.
+  const [hot, setHot] = useState(false);
+  const hoverTimer = useRef(null);
+  useEffect(() => () => clearTimeout(hoverTimer.current), []);
+  const active = activeProp || (liveOnHover && hot);
+  const hoverProps = liveOnHover
+    ? {
+        onPointerEnter: () => {
+          clearTimeout(hoverTimer.current);
+          hoverTimer.current = setTimeout(() => setHot(true), HOVER_INTENT_MS);
+        },
+        onPointerLeave: () => {
+          clearTimeout(hoverTimer.current);
+          setHot(false);
+        },
+      }
+    : {};
 
   useEffect(() => {
     onVisibilityChange(camera.camera_id, visible);
@@ -68,6 +94,8 @@ export default function CameraTile({
     active ? (viewer) => hlsProxyUrl(camera, viewer) : null,
     videoRef,
   );
+  usePosterCapture(videoRef, camera.camera_id, active && playbackState === "connected");
+  const poster = getPoster(camera.camera_id);
 
   const tone = tileTone({
     streamAvailable: camera.stream_available,
@@ -191,8 +219,28 @@ export default function CameraTile({
   const isReconnecting = active && (stalled || playbackState === "reconnecting");
   const showConnecting = active && !isReconnecting && playbackState !== "connected";
   let stage = null;
-  if (!active) {
-    if (paused) {
+  if (!active && poster) {
+    stage = (
+      <img
+        className="camera-tile-poster"
+        src={poster.url}
+        alt=""
+        aria-hidden="true"
+        title={`Still from ${Math.max(1, Math.round((Date.now() - poster.at) / 1000))}s ago${liveOnHover ? " · hover to preview live" : ""}`}
+      />
+    );
+  } else if (!active) {
+    if (liveOnHover) {
+      stage = (
+        <TileStage
+          compact={compact}
+          variant="idle"
+          icon={<Camera size={compact ? 16 : 22} strokeWidth={1.75} aria-hidden="true" />}
+          title={compact ? "Hover for live" : "Hover for a live preview"}
+          detail="Beyond the live budget for the strip"
+        />
+      );
+    } else if (paused) {
       stage = (
         <TileStage
           compact={compact}
@@ -252,6 +300,7 @@ export default function CameraTile({
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") onFocus(camera.camera_id);
       }}
+      {...hoverProps}
     >
       <div className="camera-tile-frame">
         {active && <video ref={videoRef} muted playsInline autoPlay />}

@@ -1,4 +1,4 @@
-import { NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { Film, Search, Shield } from "lucide-react";
 
 import RecordingDetailView from "./RecordingDetailView.jsx";
@@ -46,6 +46,9 @@ export default function InvestigateView() {
         <Route index element={<RecordingsView />} />
         <Route path="search" element={<SearchView />} />
         <Route path="recordings/:id" element={<RecordingDetailView />} />
+        {/* An unknown sub-path goes back to this section's index instead of
+            rendering an empty page under a valid header. */}
+        <Route path="*" element={<Navigate to="/investigate" replace />} />
       </Routes>
     </section>
   );

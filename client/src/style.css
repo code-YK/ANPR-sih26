@@ -1554,12 +1554,6 @@ dialog.modal::backdrop {
 }
 
 
-.toast {
-  position: fixed; bottom: 20px; right: 20px; background: var(--surface-2); color: var(--text);
-  border: 1px solid var(--border); padding: 10px 16px; border-radius: var(--radius); font-size: 13px; opacity: 0;
-  transition: opacity 0.2s; pointer-events: none; z-index: 2000; box-shadow: var(--depth-2);
-}
-.toast.show { opacity: 1; }
 
 /* Alerts view: momentary highlight when a row just arrived via polling. */
 @keyframes row-flash-fade {
@@ -2896,66 +2890,10 @@ tr.row-hover td { background: var(--accent-bg); }
 }
 .transport-indicator.fallback { color: var(--haze-100); }
 
-.analytics-toggle {
-  margin-top: 12px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  padding: 10px 0;
-}
-.analytics-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 0;
-  font-size: 13px;
-}
-.analytics-row span { flex: 1; }
-
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex: 0 0 auto; }
 .status-dot-running { background: var(--nominal); box-shadow: 0 0 0 2px var(--nominal-soft); }
 .status-dot-queued { background: var(--degraded); box-shadow: 0 0 0 2px var(--degraded-soft); }
 .status-dot-stopped { background: var(--ink-600); }
-.analytics-note { color: var(--warn); font-size: 11.5px; font-style: normal; }
-
-/* Detector view -- the worker's own annotated frames */
-.detector-mode-switch {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-.detector-mode-switch .link-btn {
-  text-transform: capitalize;
-  padding: 5px 10px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-  background: transparent;
-  text-decoration: none !important;
-}
-.detector-mode-switch .link-btn.active {
-  font-weight: 650;
-  background: color-mix(in srgb, var(--entity) 12%, transparent);
-  border-color: color-mix(in srgb, var(--entity) 35%, transparent);
-  color: var(--entity-bright);
-  text-decoration: none !important;
-}
-.detector-mode-note { font-weight: 400; text-transform: none; letter-spacing: 0; }
-.detector-frame {
-  width: 100%;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
-  background: #05080e;
-  display: block;
-}
-.detector-stats {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; margin: 8px 0 0;
-  font-size: 12px;
-}
-.detector-stats > div { display: flex; justify-content: space-between; gap: 6px; }
-.detector-stats dt { color: var(--muted); }
-.detector-stats dd { margin: 0; font-family: var(--font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
-.detector-stale { color: var(--warn); }
-.detector-warn { color: var(--warn); }
 
 /* Native <meter> for bounded ratios (DESIGN.md §8) -- backlog vs. capacity,
    per-stop plate-read confidence. The browser already colours these via
@@ -3257,14 +3195,6 @@ dialog.modal::backdrop {
   to { opacity: 1; }
 }
 
-/* --- Toast slide-in ---------------------------------------------------- */
-.toast.show {
-  animation: toastIn 0.35s cubic-bezier(0.3, 0, 0.2, 1);
-}
-@keyframes toastIn {
-  from { opacity: 0; transform: translateY(12px) scale(0.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
 
 /* --- Focused player entrance ------------------------------------------- */
 .live-focused {
@@ -6143,6 +6073,15 @@ dialog.modal::backdrop {
   background: var(--ink-600);
 }
 
+/* The chip text pins --plate-ink (dark, for the white plate face). A tentative
+   chip has no face -- it is transparent over whatever card it sits on -- so
+   the text has to follow the surface instead. Without this, every unconfirmed
+   plate in the console rendered dark-on-dark: measured rgb(21,29,40) on a
+   ~9%-lightness card, i.e. an empty bar where the plate should be. */
+.alerts-plate-chip--tentative .alerts-plate-chip-text {
+  color: var(--text);
+}
+
 .alerts-subject-name {
   font-weight: 600;
   font-size: var(--fs-body);
@@ -7913,55 +7852,6 @@ dialog.modal::backdrop {
   cursor: not-allowed;
 }
 
-.focused-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
-  gap: 18px;
-  align-items: start;
-}
-
-.focused-stage-label {
-  margin: 0 0 10px;
-  font-size: var(--fs-section);
-  font-weight: 650;
-}
-
-.focused-player-wrap {
-  border-radius: 14px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
-  background: #000;
-  min-height: 360px;
-  aspect-ratio: 16 / 9;
-  max-height: min(62vh, 640px);
-}
-
-.focused-player-wrap .focused-player {
-  width: 100%;
-  height: 100%;
-}
-
-.focused-player-wrap .focused-player video {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  background: #000;
-}
-
-.focused-filmstrip {
-  margin-top: 16px;
-}
-
-.focused-filmstrip-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-  font-size: var(--fs-body);
-  font-weight: 600;
-  color: var(--muted);
-}
-
 .focused-strip {
   display: flex;
   gap: 10px;
@@ -7975,191 +7865,15 @@ dialog.modal::backdrop {
 }
 
 /* Inference sidebar */
-.inference-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  position: sticky;
-  top: 64px;
-}
-
-.inference-card {
-  padding: 18px;
-  border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--entity) 28%, var(--border));
-  background: color-mix(in srgb, var(--ink-800) 90%, transparent);
-}
-
-[data-theme="light"] .inference-card {
-  background: #ffffff;
-}
-
-.inference-card-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  background: var(--accent-bg);
-  color: var(--entity-bright);
-  margin-bottom: 12px;
-}
-
-.inference-card h3 {
-  margin: 0 0 8px;
-  font-size: 1.05rem;
-}
-
-.inference-card > p {
-  margin: 0 0 14px;
-  color: var(--muted);
-  font-size: var(--fs-data);
-  line-height: 1.45;
-}
-
-.inference-mode-list {
-  display: grid;
-  gap: 0;
-  margin-bottom: 14px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
-}
-
-.inference-mode-row {
-  display: grid;
-  grid-template-columns: 18px 72px 1fr;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 35%, transparent);
-  cursor: pointer;
-  font-size: var(--fs-data);
-}
-
-.inference-mode-row:last-child {
-  border-bottom: none;
-}
-
-.inference-mode-label {
-  font-weight: 650;
-  color: var(--text);
-}
-
-.inference-mode-desc {
-  color: var(--muted);
-}
-
-.inference-start-btn {
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 42px;
-  border-radius: 10px;
-}
-
-.inference-footnote {
-  margin: 10px 0 0;
-  font-size: 11.5px;
-  color: var(--muted);
-  text-align: center;
-}
-
-.camera-facts-card {
-  padding: 14px 16px;
-  border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
-  background: color-mix(in srgb, var(--ink-800) 80%, transparent);
-}
-
-[data-theme="light"] .camera-facts-card {
-  background: #ffffff;
-}
-
-.camera-facts-card dl {
-  margin: 0;
-  display: grid;
-  gap: 8px;
-}
-
-.camera-facts-card dl > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: var(--fs-data);
-}
-
-.camera-facts-card dt {
-  color: var(--muted);
-}
-
-.camera-facts-card dd {
-  margin: 0;
-  font-weight: 550;
-  text-align: right;
-}
-
-.camera-facts-badge {
-  margin-top: 12px;
-}
-
-.inference-running {
-  display: grid;
-  gap: 10px;
-}
-
-.inference-running-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.inference-tab {
-  appearance: none;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--muted);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.inference-tab.is-on {
-  background: color-mix(in srgb, var(--ink-700) 80%, transparent);
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--entity) 35%, var(--border));
-}
-
-.inference-tab-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--nominal);
-}
-
-.inference-advanced {
-  font-size: var(--fs-data);
-  color: var(--muted);
-}
-
-.inference-advanced summary {
-  cursor: pointer;
-  margin-bottom: 8px;
-}
-
 /* Workspace dock */
 .workspace-rail-toggle {
   position: fixed;
   right: 14px;
   top: 50%;
   transform: translateY(-50%);
-  z-index: 60;
+  /* Above the detector sheet (70) and its scrim (69), with Logs and Copilot:
+     at 60 a click on it landed on the scrim and collapsed the focused view. */
+  z-index: 3002;
   width: 44px;
   height: 44px;
   border-radius: 12px;
@@ -8198,7 +7912,7 @@ dialog.modal::backdrop {
   top: 72px;
   bottom: 48px;
   width: min(360px, calc(100vw - 100px));
-  z-index: 59;
+  z-index: 3002;
   display: flex;
   flex-direction: column;
   border-radius: 14px;
@@ -8323,6 +8037,16 @@ dialog.modal::backdrop {
   background: var(--degraded);
 }
 
+/* A worker that died is a condition to act on; one whose clip simply ended is
+   not. Only the first takes the urgency colour (DESIGN.md 4). */
+.workspace-dot.state-failed {
+  background: var(--critical);
+}
+
+.workspace-dot.state-exited {
+  background: var(--haze-400);
+}
+
 .workspace-stop {
   display: inline-flex;
   align-items: center;
@@ -8333,12 +8057,6 @@ dialog.modal::backdrop {
 }
 
 @media (max-width: 1000px) {
-  .focused-body {
-    grid-template-columns: 1fr;
-  }
-  .inference-sidebar {
-    position: static;
-  }
   .workspace-panel {
     right: 12px;
     left: 12px;
@@ -8729,4 +8447,1459 @@ button.primary:not(.secondary):not(.theme-toggle),
 
 @media (max-width: 767px) {
   .copilot-fab { right: 12px; bottom: 62px; }
+}
+
+
+/* ===== Detector workbench ==============================================
+   The focused camera moves through three states, and the [data-layout] on the
+   root is the only thing that switches between them:
+
+     plain   nothing running -- feed, and the card that starts inference
+     sheet   the modal: detector across the larger, left part of the screen
+             with the model's reporting down its right, page scrimmed behind
+     docked  sheet dismissed, worker still running -- feed and detector side
+             by side, reporting under the detector
+
+   The raw player keeps its DOM position in all three (the sheet is fixed and
+   floats over the page, it does not re-parent anything), because remounting
+   the <video> would re-attach hls.js and cost 6-15s of black re-buffering.
+
+   Colour discipline (DESIGN.md 4) holds here with one declared exception: the
+   legend swatches, which decode hues the *worker* drew into the frame.
+   ====================================================================== */
+.detector-workbench {
+  display: grid;
+  gap: var(--sp-4) var(--sp-5);
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+}
+
+/* With a detector running, feed and detector get equal width. The sheet keeps
+   the docked grid underneath it so dismissing the modal lands the operator on
+   the layout that was already there, rather than one that reflows as it goes. */
+.detector-workbench[data-layout="docked"],
+.detector-workbench[data-layout="sheet"] {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.dw-feed { min-width: 0; }
+.dw-ai { min-width: 0; position: relative; display: grid; gap: var(--sp-3); align-content: start; }
+
+/* The sheet: anchored left, wider than half the viewport, with enough page
+   left uncovered on the right that "click outside" is a real target rather
+   than a hairline. The status strip stays visible below it. */
+.dw-ai[data-sheet] {
+  position: fixed;
+  z-index: 70;
+  top: 0;
+  bottom: var(--status-h);
+  left: 0;
+  right: clamp(96px, 9vw, 190px);
+  gap: 0;
+  align-content: stretch;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  box-shadow: var(--depth-2);
+}
+
+.dw-scrim {
+  position: fixed;
+  z-index: 69;
+  inset: 0 0 var(--status-h) 0;
+  background: hsl(var(--ground-h) 30% 2% / 0.55);
+  cursor: pointer;
+}
+
+[data-theme="light"] .dw-scrim { background: hsl(var(--ground-h) 20% 30% / 0.35); }
+
+/* Docked, the reporting sits under the detector; in the sheet it takes the
+   right of the modal, so the detector itself still covers more than half the
+   screen from the left. */
+.dw-body { display: grid; gap: var(--sp-3); min-width: 0; }
+
+.dw-ai[data-sheet] .dw-body {
+  grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr);
+  gap: var(--sp-4);
+  align-items: stretch;
+  min-height: 0;
+  height: 100%;
+}
+
+.dw-detector { min-width: 0; }
+.dw-aux { min-width: 0; min-height: 0; }
+
+/* In the sheet each column scrolls itself inside the modal's fixed height;
+   nothing in the rail can push the page. */
+.dw-ai[data-sheet] .dw-detector { min-height: 0; overflow-y: auto; }
+.dw-ai[data-sheet] .dw-aux { height: 100%; overflow: hidden; }
+
+/* The sheet's own identity sits after the tabs, not before them: the tabs are
+   the control an operator reaches for, and they hold the top-left corner in
+   both the docked and the sheet state. */
+.dw-sheet-name {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin: 0 var(--sp-2) 0 var(--sp-3);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.dw-sheet-name:focus-visible { outline: 2px solid var(--entity); outline-offset: 3px; }
+.dw-sheet-name .eyebrow { margin: 0; }
+
+.dw-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.dw-ai[data-sheet] .dw-head { margin-bottom: var(--sp-3); }
+
+/* The header's last control is the view switch, always in the top-right
+   corner of the panel, in both the docked and sheet states. */
+.dw-head .dw-view-btn { margin-left: auto; }
+
+/* -- header: mode tabs, stop, layout switch --------------------------- */
+.detector-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-right: auto;
+}
+
+.detector-tab-group { position: relative; display: inline-flex; align-items: stretch; }
+
+.detector-tab {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 32px;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.detector-tab-group[data-anpr] .detector-tab {
+  border-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.detector-tab:hover { color: var(--text); background: color-mix(in srgb, var(--ink-700) 70%, transparent); }
+
+.detector-tab.is-active {
+  color: var(--text);
+  background: color-mix(in srgb, var(--ink-700) 90%, transparent);
+  border-color: color-mix(in srgb, var(--entity) 40%, var(--border));
+  box-shadow: var(--depth-1);
+}
+
+.detector-tab-model {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  padding-left: var(--sp-2);
+  border-left: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.detector-tab-caret {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  min-height: 32px;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.detector-tab-caret:hover,
+.detector-tab-caret.is-open {
+  color: var(--text);
+  background: color-mix(in srgb, var(--ink-700) 90%, transparent);
+}
+
+.detector-tab-caret.is-open svg { transform: rotate(180deg); }
+
+.detector-model-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 268px;
+  padding: var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--depth-2);
+}
+
+.detector-model-menu-head {
+  margin: 0 0 var(--sp-2);
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.detector-model-menu-head span {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--haze-400);
+}
+
+.detector-model-item {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.detector-model-item:hover:not(:disabled) { background: color-mix(in srgb, var(--ink-700) 90%, transparent); }
+.detector-model-item:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.detector-model-check { width: 14px; display: grid; place-items: center; color: var(--entity-bright); }
+.detector-model-body { display: grid; gap: 1px; margin-right: auto; }
+
+.detector-model-label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.detector-model-label em {
+  font-style: normal;
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--haze-400);
+}
+
+.detector-model-detail { font-size: 11.5px; color: var(--muted); }
+
+.detector-model-menu-note {
+  margin: var(--sp-2) 0 0;
+  padding: 0 var(--sp-2);
+  font-size: 11.5px;
+  color: var(--warn);
+}
+
+.dw-stop { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 0.625rem; font-size: 12.5px; }
+
+.dw-view-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 0.625rem;
+  border: 0;
+  border-radius: calc(var(--radius) - 1px);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.dw-view-btn:hover { color: var(--text); }
+
+.dw-view-btn.is-active {
+  color: var(--text);
+  background: color-mix(in srgb, var(--ink-700) 95%, transparent);
+  box-shadow: var(--depth-1);
+}
+
+@media (max-width: 720px) {
+  .dw-view-btn span { display: none; }
+}
+
+/* -- the stage: the worker's own frames -------------------------------- */
+.detector-stage {
+  position: relative;
+  border-radius: var(--radius-video);
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  /* Near-black in both themes: this is a video letterbox, and a white well
+     behind footage reads as a broken image (DESIGN.md §4 keeps the letterbox
+     dark regardless of theme). */
+  background: #05080e;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  display: grid;
+  place-items: center;
+  max-height: min(48vh, 540px);
+}
+
+.dw-ai[data-sheet] .detector-stage {
+  max-height: calc(100dvh - var(--status-h) - 260px);
+}
+
+.detector-stage-frame {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.detector-stage[data-loaded] .detector-stage-frame { opacity: 1; }
+
+.detector-stage-empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-2);
+  max-width: 34ch;
+  padding: var(--sp-4);
+  text-align: center;
+  color: var(--muted);
+}
+
+/* Sits over the stream while its first frame is on the way, rather than
+   beside it in the grid: the <img> is already mounted and connecting. */
+.detector-stage-connecting {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  align-content: center;
+}
+
+.detector-stage-empty h3 { margin: 0; font-size: var(--fs-section); color: var(--text); }
+.detector-stage-empty p { margin: 0; font-size: var(--fs-data); }
+.detector-stage-empty button { margin-top: var(--sp-2); }
+.detector-blocked { color: var(--warn); }
+
+.detector-stage-top,
+.detector-stage-bottom {
+  position: absolute;
+  left: var(--sp-2);
+  right: var(--sp-2);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  pointer-events: none;
+}
+
+.detector-stage-top { top: var(--sp-2); }
+.detector-stage-bottom { bottom: var(--sp-2); justify-content: flex-end; }
+
+.detector-live-chip,
+.detector-caption {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: hsl(var(--ground-h) 20% 2% / 0.68);
+  color: var(--haze-100);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  pointer-events: auto;
+}
+
+.detector-caption { font-weight: 500; color: var(--haze-300); cursor: help; }
+
+.detector-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--nominal);
+}
+
+.detector-live-chip[data-tone="warn"] .detector-live-dot { background: var(--degraded); }
+
+.detector-banner {
+  position: absolute;
+  bottom: var(--sp-2);
+  left: var(--sp-2);
+  max-width: 46ch;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  background: hsl(var(--ground-h) 20% 2% / 0.78);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.detector-banner.is-warn { color: var(--degraded); }
+.detector-banner + .detector-banner { bottom: calc(var(--sp-2) + 26px); }
+
+.detector-spin { animation: detector-spin 0.9s linear infinite; }
+
+@keyframes detector-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* -- telemetry: metrics, health, legend -------------------------------- */
+.detector-telemetry {
+  display: grid;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+
+.detector-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 1px;
+  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--border) 50%, transparent);
+  overflow: hidden;
+}
+
+.detector-metric {
+  display: grid;
+  gap: 2px;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--panel);
+}
+
+.detector-metric-value {
+  font-size: 1.125rem;
+  font-weight: 650;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.detector-metric[data-tone="critical"] .detector-metric-value { color: var(--critical); }
+
+.detector-metric-label {
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.detector-telemetry[data-density="compact"] .detector-metric { padding: 6px var(--sp-2); }
+.detector-telemetry[data-density="compact"] .detector-metric-value { font-size: var(--fs-body); }
+
+.detector-health {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  font-size: var(--fs-data);
+  color: var(--muted);
+}
+
+.detector-health-item { display: inline-flex; align-items: center; gap: 6px; }
+
+.detector-health-label {
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--haze-400);
+}
+
+.detector-health-item .mono { font-variant-numeric: tabular-nums; color: var(--text); }
+.detector-health-aside { color: var(--haze-400); }
+
+.detector-legend {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--ink-800) 70%, transparent);
+}
+
+.detector-legend-title {
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.detector-legend ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.detector-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-data);
+  color: var(--haze-300);
+}
+
+.detector-swatch {
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--swatch);
+  flex: 0 0 auto;
+}
+
+/* The two plate marks are drawn as borders on the frame, not filled boxes --
+   the swatch mirrors that so the legend looks like what it describes. */
+.detector-swatch[data-shape="plate"] {
+  background: hsl(45 12% 96%);
+  border: 2px solid var(--swatch);
+}
+
+.detector-swatch[data-shape="dashed"] {
+  background: transparent;
+  border: 1px dashed var(--swatch);
+}
+
+.detector-legend-model { margin-left: auto; font-size: 11.5px; color: var(--haze-400); }
+
+/* -- the raw feed, and what a reading has to be judged against --------- */
+.dw-feed-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.dw-feed-head h2 { margin: 0; font-size: var(--fs-section); }
+.dw-feed-meta { font-size: 11.5px; color: var(--haze-400); }
+
+.dw-feed-stage {
+  border-radius: var(--radius-video);
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: #05080e;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  max-height: min(48vh, 540px);
+}
+
+.dw-feed-stage .focused-player { width: 100%; height: 100%; }
+
+.dw-feed-stage .focused-player video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  /* Transparent, not black: the stage behind it is already the letterbox, and
+     a painted video would hide the still shown while it connects. */
+  background: transparent;
+}
+
+.dw-strip { margin-top: var(--sp-4); }
+
+.dw-strip-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* -- the reporting rail: fixed sections, each scrolling itself -------------
+   A section's size is decided by the layout, never by how much it holds, so a
+   burst of readings fills a list instead of shoving the next heading down. */
+.rail {
+  display: grid;
+  gap: var(--sp-3);
+  min-height: 0;
+}
+
+.rail-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: var(--sp-3);
+  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--ink-800) 85%, transparent);
+}
+
+[data-theme="light"] .rail-section { background: #ffffff; }
+
+.rail-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: 0 0 auto;
+  margin-bottom: var(--sp-2);
+}
+
+.rail-head h3 { margin: 0; font-size: var(--fs-section); }
+.rail-head .detector-count { margin-left: auto; }
+
+.rail-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 2px;
+}
+
+.rail-foot {
+  flex: 0 0 auto;
+  margin: var(--sp-2) 0 0;
+  padding-top: var(--sp-2);
+  border-top: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--haze-400);
+}
+
+/* Docked (under the detector): fixed heights, so the page below does not jump
+   as readings come and go. */
+.rail-inview .rail-body { max-height: 190px; }
+.rail-reading .rail-body { height: 300px; }
+.rail-confirmed .rail-body { height: 260px; }
+.rail-events .rail-body { height: 320px; }
+
+/* Sheet (right of the detector): the rail is exactly the modal's height and
+   splits it -- in-view sized to its rows, the two feeds sharing the rest. */
+.dw-ai[data-sheet] .rail {
+  height: 100%;
+  grid-template-rows: auto minmax(0, 1.25fr) minmax(0, 1fr);
+}
+
+.dw-ai[data-sheet] .rail[data-family="person"],
+.dw-ai[data-sheet] .rail[data-family="suspicious"] {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.dw-ai[data-sheet] .rail-reading .rail-body,
+.dw-ai[data-sheet] .rail-confirmed .rail-body,
+.dw-ai[data-sheet] .rail-events .rail-body {
+  height: auto;
+}
+
+.detector-count {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  color: var(--muted);
+}
+
+.detector-workbench .hint {
+  margin: 0;
+  font-size: var(--fs-data);
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* -- now reading: one card per vehicle being voted on ------------------ */
+.reading-list { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+
+.reading-card {
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border-radius: var(--radius);
+  /* Dashed while the vote is open, solid once it settles: the certainty
+     grammar from DESIGN.md 3.1, carried by texture rather than colour. */
+  border: 1px dashed color-mix(in srgb, var(--border) 85%, transparent);
+  background: color-mix(in srgb, var(--ink-700) 45%, transparent);
+}
+
+.reading-card[data-confirmed] {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--nominal) 45%, var(--border));
+}
+
+.reading-card-top { display: flex; align-items: center; gap: var(--sp-2); }
+.reading-track { font-size: 11.5px; color: var(--haze-400); }
+
+.reading-state {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.reading-state.is-confirmed { color: var(--nominal); }
+
+.reading-votes { display: flex; align-items: center; gap: var(--sp-2); font-size: 11.5px; color: var(--muted); }
+.reading-votes-bar { display: inline-flex; gap: 3px; }
+
+.reading-votes-bar > span {
+  width: 16px;
+  height: 5px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.reading-votes-bar > span[data-filled] { background: var(--entity); }
+
+.reading-facts { display: flex; flex-wrap: wrap; gap: 2px var(--sp-3); margin: 0; }
+.reading-facts > div { display: inline-flex; align-items: baseline; gap: 5px; font-size: 11.5px; }
+.reading-facts dt { color: var(--haze-400); }
+.reading-facts dd { margin: 0; color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* -- confirmed sightings ------------------------------------------------ */
+.sighting-list { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+
+.sighting-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.sighting-thumb {
+  appearance: none;
+  width: 44px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: 3px;
+  background: #05080e;
+  color: var(--haze-400);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.sighting-thumb:disabled { cursor: default; }
+.sighting-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sighting-body { display: grid; gap: 3px; min-width: 0; }
+.sighting-meta { font-size: 11.5px; color: var(--muted); }
+.sighting-time { font-size: 11.5px; color: var(--haze-400); font-variant-numeric: tabular-nums; }
+.sighting-list[data-dense] { gap: 6px; }
+.sighting-list[data-dense] .sighting-thumb { width: 38px; height: 28px; }
+.detector-plate-absent { font-family: var(--font-mono); color: var(--haze-400); }
+
+/* -- person counts and suspicious alerts ------------------------------- */
+.count-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 56px;
+  padding: var(--sp-2);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--ink-700) 45%, transparent);
+}
+
+.count-bar { flex: 1 1 0; min-width: 3px; border-radius: 1px; background: var(--entity); }
+
+.count-list { display: grid; gap: 4px; margin: var(--sp-2) 0 0; padding: 0; list-style: none; }
+
+.count-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--sp-2);
+  align-items: baseline;
+  font-size: var(--fs-data);
+  color: var(--muted);
+}
+
+.count-list-value { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.count-list time { font-variant-numeric: tabular-nums; color: var(--haze-400); }
+
+.susp-list { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+
+.susp-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--sp-2);
+  align-items: center;
+  font-size: var(--fs-data);
+}
+
+.susp-icon { color: var(--critical); display: grid; place-items: center; }
+.susp-body { display: inline-flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.susp-reason { color: var(--muted); text-transform: capitalize; }
+.susp-list time { font-variant-numeric: tabular-nums; color: var(--haze-400); }
+
+/* -- what the detector is seeing, by class ---------------------------- */
+.class-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+
+.class-list li {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-data);
+}
+
+.class-label { color: var(--text); text-transform: capitalize; }
+.class-now { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; }
+
+.class-total {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 3ch;
+  text-align: right;
+  padding-left: var(--sp-2);
+  border-left: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+/* A class this console has no legend entry for still gets counted, so it gets
+   a neutral swatch rather than borrowing another class's colour. */
+.detector-swatch[data-unknown] {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--haze-400) 0 2px,
+    transparent 2px 4px
+  );
+}
+
+/* -- responsive floor (DESIGN.md 6.4). The console is a desk product, but
+      both layouts stay usable when the width is not there: detector first in
+      the stack, because it is the reason this view exists. */
+@media (max-width: 1100px) {
+  .detector-workbench,
+  .detector-workbench[data-layout="docked"],
+  .detector-workbench[data-layout="sheet"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* With a detector running, it leads the single column: the feed is the
+     thing the operator can already see on the wall. */
+  .detector-workbench[data-layout="docked"] .dw-ai,
+  .detector-workbench[data-layout="sheet"] .dw-ai {
+    order: -1;
+  }
+
+  /* Too narrow to anchor the sheet left: it becomes a bottom sheet, and the
+     reporting goes back under the detector rather than beside it. */
+  .dw-ai[data-sheet] {
+    top: auto;
+    right: 0;
+    height: min(92dvh, calc(100dvh - var(--status-h)));
+    border-right: 0;
+    border-top: 1px solid var(--border);
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding: var(--sp-3) var(--sp-3) var(--sp-4);
+  }
+
+  /* Stacked, the sheet scrolls as one piece. The wide layout's per-column
+     scrolling relies on min-height: 0; left in place here it let the detector
+     column shrink below its own content, which then painted over the rail --
+     measured as the In view section drawn on top of the backlog row and legend. */
+  .dw-ai[data-sheet] { grid-template-rows: auto auto; }
+  .dw-ai[data-sheet] .dw-body { grid-template-columns: minmax(0, 1fr); height: auto; align-self: start; }
+  .dw-ai[data-sheet] .dw-aux { height: auto; overflow: visible; }
+  .dw-ai[data-sheet] .dw-detector { min-height: auto; overflow: visible; }
+  .dw-ai[data-sheet] .rail { height: auto; grid-template-rows: none; }
+  .dw-ai[data-sheet] .rail-reading .rail-body { height: 300px; }
+  .dw-ai[data-sheet] .rail-confirmed .rail-body { height: 260px; }
+  .dw-ai[data-sheet] .rail-events .rail-body { height: 320px; }
+  .dw-ai[data-sheet] .detector-stage { max-height: min(46vh, 420px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detector-spin { animation: none; }
+  .detector-stage-frame,
+  .detector-tab,
+  .dw-view-btn { transition: none; }
+}
+
+/* -- plain state: the one action, the facts, and what came before ------- */
+.ai-card {
+  display: grid;
+  justify-items: start;
+  gap: var(--sp-3);
+  padding: var(--sp-5);
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--entity) 28%, var(--border));
+  background: color-mix(in srgb, var(--ink-800) 88%, transparent);
+  box-shadow: var(--depth-1);
+}
+
+[data-theme="light"] .ai-card { background: #ffffff; }
+
+.ai-card-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius);
+  background: var(--accent-bg);
+  color: var(--entity-bright);
+}
+
+.ai-card h2 { margin: 0; font-size: var(--fs-title); }
+.ai-card-lead { margin: 0; font-size: var(--fs-body); color: var(--muted); }
+
+.ai-card-modes {
+  width: 100%;
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-3) 0;
+  list-style: none;
+  border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.ai-card-modes li { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-body); }
+.ai-card-mode-name { font-weight: 600; min-width: 84px; }
+.ai-card-mode-desc { color: var(--muted); font-size: var(--fs-data); }
+
+.ai-card-action { width: 100%; justify-content: center; gap: 8px; }
+.ai-card-foot { margin: 0; font-size: 11.5px; color: var(--haze-400); }
+
+.ai-facts,
+.ai-earlier {
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--ink-800) 85%, transparent);
+}
+
+[data-theme="light"] .ai-facts,
+[data-theme="light"] .ai-earlier { background: #ffffff; }
+
+.ai-facts dl { display: grid; gap: var(--sp-2); margin: 0; }
+
+.ai-facts dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: var(--fs-data);
+}
+
+.ai-facts dt { color: var(--muted); }
+.ai-facts dd { margin: 0; text-align: right; font-weight: 550; font-variant-numeric: tabular-nums; }
+.ai-facts-badge { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--sp-3); }
+
+.ai-earlier h3 { margin: 0 0 var(--sp-2); font-size: var(--fs-body); }
+.ai-earlier ul { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+
+.ai-earlier li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.ai-earlier time { font-size: 11.5px; color: var(--haze-400); font-variant-numeric: tabular-nums; }
+
+.ai-card--loading { gap: var(--sp-2); }
+
+.ai-card-skeleton {
+  display: block;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--ink-700) 70%, transparent);
+}
+
+[data-theme="light"] .ai-card-skeleton { background: color-mix(in srgb, var(--ink-600) 18%, transparent); }
+
+/* Stills stand in for a live connection: in the focused view's filmstrip, and
+   under a player that has not presented its first frame yet. */
+.camera-tile-poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.focused-player { position: relative; }
+
+.focused-player-poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #05080e;
+}
+
+.focused-player video { position: relative; }
+
+/* -- reading log and confirmed feed: state carried by texture and words --- */
+.reading-card[data-gone] { opacity: 0.62; }
+.reading-card[data-gone][data-confirmed] { opacity: 0.85; }
+.reading-state.is-gone { color: var(--haze-400); }
+.reading-track { font-size: 11.5px; color: var(--muted); text-transform: capitalize; }
+.reading-track .mono { text-transform: none; color: var(--haze-400); }
+.reading-votes { flex-wrap: wrap; }
+.reading-meta { margin-left: auto; color: var(--haze-400); font-size: 11px; }
+.reading-grammar { font-size: 11px; }
+
+.class-list-head {
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--haze-400);
+}
+
+.class-list-head span:nth-child(3),
+.class-list-head span:nth-child(4) { text-align: right; }
+
+.sighting-row { padding: 4px 0; }
+.sighting-row + .sighting-row { border-top: 1px solid color-mix(in srgb, var(--border) 30%, transparent); }
+
+.sighting-thumb-empty {
+  cursor: default;
+  border-style: dashed;
+  background: transparent;
+}
+
+.sighting-kind {
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+}
+
+/* recorded is the settled fact and stays quiet; the two session kinds are
+   progressively less settled, and say so with a rule, not a colour. */
+.sighting-kind.is-recorded { color: var(--text); }
+.sighting-kind.is-confirmed { color: var(--muted); }
+.sighting-kind.is-likely {
+  color: var(--haze-400);
+  border-bottom: 1px dashed var(--haze-400);
+}
+
+.sighting-row[data-kind="likely"] .sighting-body { opacity: 0.85; }
+
+.sighting-alert {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--critical);
+}
+
+.susp-conf { color: var(--haze-400); font-size: 11px; }
+
+.detector-steps {
+  display: grid;
+  gap: 6px;
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+  font-size: var(--fs-data);
+}
+
+.detector-steps li { display: flex; align-items: center; gap: var(--sp-2); color: var(--haze-400); }
+.detector-steps li[data-state="done"] { color: var(--muted); }
+.detector-steps li[data-state="done"] svg { color: var(--nominal); }
+.detector-steps li[data-state="active"] { color: var(--text); }
+
+.detector-step-dot {
+  width: 13px;
+  height: 13px;
+  display: inline-grid;
+  place-items: center;
+}
+
+.detector-step-dot::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--haze-400);
+}
+
+/* A crop that was recorded but is no longer on this machine's disk: absence
+   carried by texture, the same way an unsurveyed value is (DESIGN.md 3.1). */
+.sighting-thumb[data-expired] {
+  border-style: dashed;
+  background: repeating-linear-gradient(135deg, transparent 0 4px, color-mix(in srgb, var(--haze-400) 18%, transparent) 4px 5px);
+}
+
+/* ===== Notification stack =================================================
+   frontend-v5's notification anatomy on this console's tokens: bottom-right,
+   stacked above the Copilot and Logs buttons, three cards at most. Tone is the
+   only colour and follows DESIGN.md 4 -- critical for an alert that needs a
+   person, the entity blue for an ANPR event, the nominal green only for "your
+   action worked".
+   ========================================================================= */
+.note-region {
+  position: fixed;
+  z-index: 2500;
+  right: 18px;
+  bottom: 118px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  width: min(380px, calc(100vw - 36px));
+  pointer-events: none;
+}
+
+.note-region > * { width: 100%; pointer-events: auto; }
+
+.note-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 40px 14px 14px;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--ink-700) 96%, transparent);
+  color: var(--text);
+  box-shadow: 0 12px 24px -12px hsl(215 40% 2% / 0.55), 0 28px 56px -24px hsl(215 40% 2% / 0.6);
+  animation: note-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-theme="light"] .note-card {
+  background: #ffffff;
+  box-shadow: 0 8px 20px -10px hsl(215 35% 8% / 0.22), 0 20px 44px -22px hsl(215 35% 8% / 0.24);
+}
+
+.note-card[data-tone="critical"] { border-color: color-mix(in srgb, var(--critical) 45%, var(--border)); }
+.note-card[data-system] { align-items: center; padding: 11px 40px 11px 12px; }
+
+.note-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink-600) 70%, transparent);
+  color: var(--muted);
+}
+
+.note-card[data-tone="signal"] .note-icon { background: var(--accent-bg); color: var(--entity-bright); }
+.note-card[data-tone="critical"] .note-icon { background: var(--critical-soft); color: var(--critical); }
+.note-card[data-tone="live"] .note-icon { background: var(--nominal-soft); color: var(--nominal); }
+.note-card[data-system] .note-icon { width: 28px; height: 28px; border-radius: 8px; }
+
+.note-content { display: grid; gap: 5px; min-width: 0; flex: 1; }
+
+.note-overline {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  margin: 0;
+  color: var(--haze-400);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* The kind label never wraps; the camera name gives way instead, with an
+   ellipsis -- "Watchlist" on one line and "match" on the next read as two
+   things when an evidence image narrows the card. */
+.note-overline > span:first-child { flex: none; white-space: nowrap; }
+.note-camera { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.note-dot { color: var(--haze-400); }
+
+.note-time {
+  margin-left: auto;
+  padding-left: 8px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.note-title {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  font-weight: 620;
+  line-height: 1.35;
+  text-align: left;
+}
+
+button.note-title { cursor: pointer; }
+button.note-title:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.note-plates { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 2px; }
+.note-more { color: var(--haze-400); font-family: var(--font-mono); font-size: 11.5px; }
+.note-detail { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+
+.note-image {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.note-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--haze-400);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.12s ease, background-color 0.12s ease;
+}
+
+.note-card:hover .note-close,
+.note-card:focus-within .note-close,
+.note-close:focus-visible { opacity: 1; }
+
+.note-close:hover { background: color-mix(in srgb, var(--ink-600) 80%, transparent); color: var(--text); }
+
+@media (hover: none) {
+  .note-close { opacity: 1; }
+}
+
+/* How long the card has left: drains, and pauses while hovered. */
+.note-timer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: currentColor;
+  color: var(--haze-400);
+  transform-origin: left;
+  animation-name: note-drain;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  opacity: 0.6;
+}
+
+.note-card[data-tone="critical"] .note-timer { color: var(--critical); }
+.note-card[data-tone="signal"] .note-timer { color: var(--entity); }
+.note-card[data-tone="live"] .note-timer { color: var(--nominal); }
+
+.note-overflow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--ink-800) 96%, transparent);
+  color: var(--muted);
+  font-size: 12px;
+  box-shadow: var(--depth-2);
+}
+
+[data-theme="light"] .note-overflow { background: #ffffff; }
+
+.note-overflow button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--entity-bright);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+@keyframes note-in {
+  from { opacity: 0; transform: translateX(24px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes note-drain {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-card { animation: none; }
+  .note-timer { display: none; }
+}
+
+@media (max-width: 767px) {
+  .note-region { right: 12px; left: 12px; width: auto; }
+}
+
+.alerts-void.is-error h2 { color: var(--critical); }
+.alerts-camera-link { color: inherit; text-decoration: none; }
+.alerts-camera-link:hover strong { text-decoration: underline; text-underline-offset: 3px; }
+.confirm-dialog h2 { margin: 0 0 var(--sp-2); }
+.confirm-dialog-body { margin: 0 0 var(--sp-4); color: var(--muted); font-size: var(--fs-body); line-height: 1.5; }
+.confirm-danger { background: var(--critical) !important; border-color: var(--critical) !important; }
+
+.live-state {
+  display: grid;
+  justify-items: start;
+  gap: var(--sp-2);
+  padding: var(--sp-6);
+  border: 1px dashed color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: var(--radius);
+  color: var(--muted);
+}
+.live-state h3 { margin: 0; color: var(--text); font-size: var(--fs-section); }
+.live-state p { margin: 0; font-size: var(--fs-body); }
+
+.page-error {
+  display: grid;
+  justify-items: start;
+  gap: var(--sp-3);
+  max-width: 640px;
+  margin: var(--sp-8) auto;
+  padding: var(--sp-6);
+  border: 1px solid color-mix(in srgb, var(--critical) 40%, var(--border));
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.page-error h2 { margin: 0; }
+.page-error p { margin: 0; color: var(--muted); }
+.page-error-detail {
+  width: 100%;
+  margin: 0;
+  padding: var(--sp-3);
+  overflow-x: auto;
+  border-radius: var(--radius);
+  background: var(--ink-900);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--critical);
+  white-space: pre-wrap;
+}
+
+.location-search { position: relative; margin-bottom: var(--sp-2); }
+.location-search input { width: 100%; }
+.location-search-results {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--depth-2);
+}
+.location-search-results button {
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-data);
+  text-align: left;
+  cursor: pointer;
+}
+.location-search-results button:hover,
+.location-search-results button:focus-visible { background: color-mix(in srgb, var(--ink-700) 90%, transparent); }
+.location-search-note { padding: 6px 8px; font-size: var(--fs-data); color: var(--muted); }
+.location-search-note.is-error { color: var(--critical); }
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.investigate-td-actions { width: 1%; white-space: nowrap; text-align: right; }
+
+.investigate-check { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-data); color: var(--text); }
+.investigate-more { margin-top: var(--sp-3); }
+
+.export-menu { position: relative; display: inline-block; }
+.export-menu > summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.export-menu > summary::-webkit-details-marker { display: none; }
+.export-menu-list {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 160px;
+  display: grid;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--depth-2);
+}
+.export-menu-list a {
+  padding: 7px 10px;
+  border-radius: 3px;
+  color: var(--text);
+  font-size: var(--fs-data);
+  text-decoration: none;
+}
+.export-menu-list a:hover,
+.export-menu-list a:focus-visible { background: color-mix(in srgb, var(--ink-700) 90%, transparent); }
+
+.admin-tool-btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+
+/* Catches the click outside an open Workspace panel so it closes only the
+   panel -- without it, that click fell through to whatever was underneath,
+   including the detector sheet's scrim. */
+.workspace-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3001;
+  background: transparent;
 }

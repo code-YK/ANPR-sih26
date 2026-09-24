@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Radar } from "lucide-react";
 
 import { api } from "../../api.js";
 import { LiveBadge } from "../../components/Badge.jsx";
 import { useToast } from "../../components/Toast.jsx";
-import { isDepartmentAdmin, isSuperAdmin, useAuth } from "../../context/AuthContext.jsx";
+import { canAccessDepartment, isDepartmentAdmin, isSuperAdmin, useAuth } from "../../context/AuthContext.jsx";
 import { useCameras } from "../../context/CamerasContext.jsx";
 import { usePageTitle } from "../../hooks/usePageTitle.js";
 
@@ -13,10 +15,24 @@ function fmtTime(iso) {
 
 export default function HealthHistoryView() {
   usePageTitle("Registry · Health history");
-  const { cameras } = useCameras();
+  const { cameras, refresh: refreshCameras } = useCameras();
   const { user } = useAuth();
   const showToast = useToast();
-  const [cameraId, setCameraId] = useState("");
+  // The selected camera lives in the URL (?camera=), so the registry list's
+  // Health button can open straight onto one, and Back returns to it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const cameraId = searchParams.get("camera") ?? "";
+  const setCameraId = (next) =>
+    setSearchParams(
+      (params) => {
+        const updated = new URLSearchParams(params);
+        if (next) updated.set("camera", next);
+        else updated.delete("camera");
+        return updated;
+      },
+      { replace: true },
+    );
+  const [probing, setProbing] = useState(false);
   const [history, setHistory] = useState([]);
   const [workOrders, setWorkOrders] = useState([]);
   const [error, setError] = useState("");
@@ -51,6 +67,33 @@ export default function HealthHistoryView() {
   const canManage = Boolean(
     selected && (isSuperAdmin(user) || (isDepartmentAdmin(user) && selected.department === user.home_department)),
   );
+
+  const canProbe = Boolean(selected && canAccessDepartment(user, selected.department, "operator"));
+
+  // A transport probe of this one camera, recorded in the audit log and added
+  // to the history below -- "is it reachable right now" answered without
+  // waiting for the next scheduled probe.
+  async function probeNow() {
+    setProbing(true);
+    try {
+      const result = await api(`/probe?camera_id=${encodeURIComponent(cameraId)}`, { method: "POST" });
+      const row = result.results?.[0];
+      showToast(
+        row?.transport_ok && row.transport_ok !== "none"
+          ? `Probe succeeded over ${row.transport_ok}${row.width ? ` · ${row.width}×${row.height}` : ""}${row.codec ? ` · ${row.codec}` : ""}`
+          : `Probe failed: ${row?.error ?? "no transport reachable"}`,
+      );
+      const [healthRows] = await Promise.all([
+        api(`/cameras/${encodeURIComponent(cameraId)}/health-history`),
+        refreshCameras(),
+      ]);
+      setHistory(healthRows);
+    } catch (err) {
+      showToast("Probe failed: " + err.message);
+    } finally {
+      setProbing(false);
+    }
+  }
 
   async function reloadWorkOrders() {
     const rows = await api(`/cameras/${encodeURIComponent(cameraId)}/maintenance-work-orders`);
@@ -105,6 +148,12 @@ export default function HealthHistoryView() {
             <option key={camera.camera_id} value={camera.camera_id}>{camera.name} — {camera.location_text}</option>
           ))}
         </select>
+        {canProbe && (
+          <button type="button" className="secondary registry-tool-btn" onClick={probeNow} disabled={probing}>
+            <Radar size={15} strokeWidth={2} aria-hidden="true" />
+            {probing ? "Probing…" : "Probe stream now"}
+          </button>
+        )}
       </div>
       {selected && (
         <p className="hint">

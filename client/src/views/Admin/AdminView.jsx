@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Database, Film, KeyRound, Search } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Archive, Database, Download, Film, KeyRound, Search } from "lucide-react";
 
 
-import { api } from "../../api.js";
+import { API, api } from "../../api.js";
+import { useConfirm } from "../../components/ConfirmDialog.jsx";
 import { useToast } from "../../components/Toast.jsx";
 import { isSuperAdmin, useAuth } from "../../context/AuthContext.jsx";
 import { useCameras } from "../../context/CamerasContext.jsx";
@@ -39,6 +41,8 @@ export default function AdminView() {
   const { departments, refresh: refreshDepartments } = useDepartments();
   const { cameras } = useCameras();
   const superAdmin = isSuperAdmin(user);
+  const [confirm, confirmDialog] = useConfirm();
+  const [archiving, setArchiving] = useState(false);
   const showToast = useToast();
   const [requests, setRequests] = useState([]);
   const [users, setUsers] = useState([]);
@@ -54,7 +58,13 @@ export default function AdminView() {
   const [demoBusy, setDemoBusy] = useState(false);
   const [governmentMode, setGovernmentMode] = useState(null);
   const [governmentBusy, setGovernmentBusy] = useState(false);
-  const [adminTab, setAdminTab] = useState("people");
+  // The section is the URL, not component state: /admin/audit is a link that
+  // opens the audit log, Back steps between sections instead of leaving Admin
+  // entirely, and a reload stays where the operator was. An unknown or
+  // not-permitted section falls back to People rather than rendering nothing.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const requestedTab = location.pathname.replace(/^\/admin\/?/, "").split("/")[0];
   const [peopleQuery, setPeopleQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [auditQuery, setAuditQuery] = useState("");
@@ -234,12 +244,43 @@ export default function AdminView() {
     );
   }
 
-  function deleteSource(source) {
-    if (!window.confirm(`Delete catalogue source "${source.name}"? This only works if no cameras still reference it.`)) return;
+  async function deleteSource(source) {
+    const ok = await confirm({
+      title: `Delete catalogue source "${source.name}"?`,
+      body: "This only works if no cameras still reference it. The deletion is recorded in the audit log.",
+      confirmLabel: "Delete source",
+      danger: true,
+    });
+    if (!ok) return;
     perform(
       () => api(`/catalogue-sources/${source.id}`, { method: "DELETE" }),
       `Deleted "${source.name}"`,
     );
+  }
+
+  // Writes a verifiable NDJSON snapshot plus its SHA-256 digest to the
+  // configured retention mount (auth.py's archive endpoint). Separate from the
+  // download on purpose: a browser download never writes server-side data, and
+  // this never returns audit rows to the browser.
+  async function archiveAudit() {
+    const ok = await confirm({
+      title: "Write an audit archive?",
+      body: "A verifiable snapshot of every audit event is written to the retention mount, with its SHA-256 digest. Existing archives are never overwritten.",
+      confirmLabel: "Write archive",
+    });
+    if (!ok) return;
+    setArchiving(true);
+    try {
+      const result = await api("/admin/audit-events/archive", { method: "POST" });
+      showToast(`Audit archive written: ${result.event_count} events`, {
+        tone: "live",
+        detail: `${result.archive_name} · sha256 ${String(result.sha256).slice(0, 16)}…`,
+      });
+    } catch (error) {
+      showToast("Archive failed: " + error.message);
+    } finally {
+      setArchiving(false);
+    }
   }
 
   async function toggleDemoMode(enabled) {
@@ -325,6 +366,7 @@ export default function AdminView() {
     { id: "audit", label: "Audit log" },
     ...(superAdmin ? [{ id: "sources", label: "Catalogue sources" }, { id: "system", label: "System" }] : []),
   ];
+  const adminTab = tabs.some((tab) => tab.id === requestedTab) ? requestedTab : "people";
 
   return (
     <section className="admin-shell">
@@ -342,7 +384,8 @@ export default function AdminView() {
             key={t.id}
             type="button"
             className={adminTab === t.id ? "is-on" : undefined}
-            onClick={() => setAdminTab(t.id)}
+            aria-current={adminTab === t.id ? "page" : undefined}
+            onClick={() => navigate(t.id === "people" ? "/admin" : `/admin/${t.id}`)}
           >
             {t.label}
           </button>
@@ -695,7 +738,23 @@ export default function AdminView() {
                 <option value="">All results</option>
                 <option value="success">success</option>
                 <option value="failure">failure</option>
+                <option value="denied">denied</option>
+                <option value="partial">partial</option>
               </select>
+              {superAdmin && (
+                <>
+                  {/* The full cross-department history as a digest-verifiable
+                      download; super admin only, enforced by the API. */}
+                  <a className="secondary admin-tool-btn" href={`${API}/admin/audit-events/export`}>
+                    <Download size={15} strokeWidth={2} aria-hidden="true" />
+                    Export
+                  </a>
+                  <button type="button" className="secondary admin-tool-btn" onClick={archiveAudit} disabled={archiving}>
+                    <Archive size={15} strokeWidth={2} aria-hidden="true" />
+                    {archiving ? "Archiving…" : "Archive"}
+                  </button>
+                </>
+              )}
             </div>
           </div>
           <div className="admin-table-wrap">
@@ -973,6 +1032,7 @@ export default function AdminView() {
           </p>
         </div>
       )}
+      {confirmDialog}
     </section>
   );
 }

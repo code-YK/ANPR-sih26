@@ -668,6 +668,61 @@ class PlateReader:
                            origin=(x1, y1), frame_index=frame_count,
                            two_row_vehicle=name in self.two_row_classes)
 
+    def progress(self, track_ids, limit=6, min_votes=None, class_names=None):
+        """How far each in-frame vehicle's plate vote has got.
+
+        This is what the detector view needs to show the reading *in
+        progress* -- the counterpart to display(), which draws one label at
+        the plate. Deliberately restricted to `track_ids` and capped at
+        `limit`, unlike summary(), which walks every track the run has ever
+        seen: this is published several times a second for the whole life of
+        a worker, so it has to cost O(vehicles in frame), not O(vehicles
+        ever). A track with no read yet is absent rather than reported empty.
+
+        Every row is a *belief*, not a fact. Only `confirmed` rows have
+        passed the per-character multi-frame vote; an unconfirmed `text` is
+        the same tentative consensus the frame draws with a trailing "?"
+        (the caller adds the marker, so the raw string stays usable). `votes`
+        is how many independent valid reads are currently voting, against
+        `min_votes` needed -- which is the honest "2 of 3 frames agree so
+        far" an operator wants, and it can exceed min_votes while the
+        per-character vote is still split. Nothing here is ever written to
+        the observation store; only confirmed() feeds a sighting.
+        """
+        need = min_votes or self.min_votes
+        rows = []
+        # `class_names`, when given, is aligned with `track_ids` (one detector
+        # class per box, as read_vehicles receives it), so a row can say what
+        # it is a plate *of* -- "car #41" reads, "#41" does not.
+        vehicle_of = dict(zip(track_ids, class_names)) if class_names else {}
+        for track_id in track_ids:
+            vote = self.votes.get(track_id)
+            if vote is None or not vote.reads:
+                continue
+            text, confidence, votes = vote.confirmed(need)
+            confirmed = text is not None
+            if not confirmed:
+                text, _score, _n = vote.consensus()
+                confidence = vote.mean_confidence(text) if text else None
+            rows.append({
+                "track_id": int(track_id),
+                "text": text,
+                "confirmed": confirmed,
+                "votes": int(votes),
+                "min_votes": int(need),
+                "reads": len(vote.reads),
+                "valid": bool(text) and is_valid_indian(text),
+                "edits": vote.min_edits(text) if text else 99,
+                "confidence": round(float(confidence), 3) if confidence else None,
+                "best_width": int(vote.best_width),
+                "vehicle": vehicle_of.get(track_id),
+            })
+        # Closest to settled first: a confirmed plate, then whichever has the
+        # most independent reads behind it. The cap then drops the vehicles
+        # the model has barely looked at, not the one about to confirm.
+        rows.sort(key=lambda r: (not r["confirmed"], -r["votes"], -r["reads"]))
+        return rows[:limit]
+
     def summary(self, min_votes=None):
         """Resolved plates for every track, best-supported first."""
         rows = []

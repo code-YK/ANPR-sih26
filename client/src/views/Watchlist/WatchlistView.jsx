@@ -3,10 +3,11 @@ import { Link } from "react-router-dom";
 import { Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
 
 import { api } from "../../api.js";
+import { useConfirm } from "../../components/ConfirmDialog.jsx";
+import PlateChip from "../../components/PlateChip.jsx";
 import { useToast } from "../../components/Toast.jsx";
 import { isSuperAdmin, useAuth } from "../../context/AuthContext.jsx";
 import { usePageTitle } from "../../hooks/usePageTitle.js";
-import { plateGroups } from "../../lib/plate.js";
 import WatchlistEntryModal from "./WatchlistEntryModal.jsx";
 
 function fmtDate(iso) {
@@ -22,28 +23,6 @@ function fmtDate(iso) {
   }
 }
 
-function PlateChip({ plate }) {
-  if (!plate) return <span className="faint">—</span>;
-  const tentative = String(plate).endsWith("?");
-  return (
-    <span
-      className={
-        tentative ? "alerts-plate-chip alerts-plate-chip--tentative" : "alerts-plate-chip"
-      }
-      aria-label={`Plate ${String(plate).replace("?", "")}`}
-    >
-      <span className="alerts-plate-chip-stripe" aria-hidden="true">
-        IND
-      </span>
-      <span className="alerts-plate-chip-text" aria-hidden="true">
-        {plateGroups(plate).map((group, index) => (
-          <span key={index}>{group}</span>
-        ))}
-      </span>
-    </span>
-  );
-}
-
 export default function WatchlistView() {
   usePageTitle("Watchlist");
   const { user } = useAuth();
@@ -54,6 +33,7 @@ export default function WatchlistView() {
   const [editing, setEditing] = useState(null);
   const [creating, setCreating] = useState(false);
   const showToast = useToast();
+  const [confirm, confirmDialog] = useConfirm();
 
   async function load() {
     const params = activeOnly ? "?active=true" : "";
@@ -66,7 +46,15 @@ export default function WatchlistView() {
   }, [activeOnly]);
 
   async function handleDelete(entry) {
-    if (!window.confirm(`Remove ${entry.raw_value} from the watchlist?`)) return;
+    const ok = await confirm({
+      title: `Remove ${entry.raw_value} from the watchlist?`,
+      // Matches watchlist.py: an entry with alert history is refused (409)
+      // so that history cannot vanish; deactivating is the way to stop matches.
+      body: "This works only if the entry has never raised an alert. An entry with alert history cannot be deleted — deactivate it instead to stop new matches.",
+      confirmLabel: "Remove",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api(`/watchlist/${entry.id}`, { method: "DELETE" });
       showToast("Removed");
@@ -180,7 +168,7 @@ export default function WatchlistView() {
               {rows.map((entry) => (
                 <tr key={entry.id} className={entry.active ? "is-active" : "is-idle"}>
                   <td>
-                    <Link to={`/journey/${entry.raw_value}`} className="watchlist-plate-link">
+                    <Link to={`/journey/${encodeURIComponent(entry.normalised_value ?? entry.raw_value)}`} className="watchlist-plate-link">
                       <PlateChip plate={entry.raw_value} />
                     </Link>
                   </td>
@@ -255,6 +243,7 @@ export default function WatchlistView() {
           onSaved={load}
         />
       )}
+      {confirmDialog}
     </section>
   );
 }

@@ -1,8 +1,11 @@
 import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
+import { Trash2 } from "lucide-react";
 
 import { api } from "../../api.js";
-import { canAccessDepartment, isSuperAdmin, useAuth } from "../../context/AuthContext.jsx";
+import { useConfirm } from "../../components/ConfirmDialog.jsx";
+import { useToast } from "../../components/Toast.jsx";
+import { canAccessDepartment, isDepartmentAdmin, isSuperAdmin, useAuth } from "../../context/AuthContext.jsx";
 import { usePolling } from "../../hooks/usePolling.js";
 import { usePageTitle } from "../../hooks/usePageTitle.js";
 import UploadModal from "./UploadModal.jsx";
@@ -20,9 +23,16 @@ export default function RecordingsView() {
   const [recordings, setRecordings] = useState([]);
   const [showUpload, setShowUpload] = useState(false);
   const [deptFilter, setDeptFilter] = useState("");
+  // Until the first reply the list is unknown, not empty: this said "No
+  // recordings uploaded yet" on every visit while the request was in flight.
+  const [loaded, setLoaded] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [confirm, confirmDialog] = useConfirm();
+  const showToast = useToast();
 
-  const refresh = useCallback(async () => {
-    setRecordings(await api("/investigate/recordings"));
+  const refresh = useCallback(async (signal) => {
+    setRecordings(await api("/investigate/recordings", { signal }));
+    setLoaded(true);
   }, []);
 
   const anyInFlight = recordings.some((r) => r.status === "uploading" || r.status === "normalising");
@@ -30,6 +40,32 @@ export default function RecordingsView() {
 
   const rows = recordings.filter((r) => !deptFilter || r.department === deptFilter);
   const departments = [...new Set(recordings.map((r) => r.department))].sort();
+  // Mirrors investigate.py's delete_recording: a department admin for the
+  // recording's own department, or a super admin. The API enforces it; this
+  // only avoids offering a button that would be refused.
+  const canDelete = (r) =>
+    isSuperAdmin(user) || (isDepartmentAdmin(user) && user?.home_department === r.department);
+
+  async function remove(r) {
+    const ok = await confirm({
+      title: `Delete ${r.original_filename}?`,
+      body: "The recording, its ingest runs and every track found in it are removed, and the file is deleted from disk. This is recorded in the audit log and cannot be undone.",
+      confirmLabel: "Delete recording",
+      danger: true,
+    });
+    if (!ok) return;
+    setDeletingId(r.id);
+    try {
+      await api(`/investigate/recordings/${r.id}`, { method: "DELETE" });
+      setRecordings((prev) => prev.filter((row) => row.id !== r.id));
+      showToast(`${r.original_filename} deleted`);
+    } catch (err) {
+      showToast("Delete failed: " + err.message);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   const canUploadAnywhere =
     isSuperAdmin(user) || (user?.grants || []).some((g) => canAccessDepartment(user, g.department, "operator"));
 
@@ -69,6 +105,9 @@ export default function RecordingsView() {
               <th>Recorded at</th>
               <th>Status</th>
               <th>Uploaded</th>
+              <th>
+                <span className="visually-hidden">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -94,13 +133,31 @@ export default function RecordingsView() {
                     </span>
                   </td>
                   <td>{new Date(r.created_at).toLocaleString()}</td>
+                  <td className="investigate-td-actions">
+                    {canDelete(r) && (
+                      <button
+                        type="button"
+                        className="registry-icon-btn"
+                        title="Delete recording"
+                        aria-label={`Delete ${r.original_filename}`}
+                        disabled={deletingId === r.id}
+                        onClick={() => remove(r)}
+                      >
+                        <Trash2 size={15} strokeWidth={2} />
+                      </button>
+                    )}
+                  </td>
                 </tr>
               );
             })}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="hint">
-                  No recordings uploaded yet.
+                <td colSpan={7} className="hint">
+                  {!loaded
+                    ? "Loading recordings…"
+                    : deptFilter
+                      ? `No recordings in ${deptFilter}.`
+                      : "No recordings uploaded yet."}
                 </td>
               </tr>
             )}
@@ -109,6 +166,7 @@ export default function RecordingsView() {
       </div>
 
       <UploadModal open={showUpload} onClose={() => setShowUpload(false)} onUploaded={() => refresh()} />
+      {confirmDialog}
     </div>
   );
 }

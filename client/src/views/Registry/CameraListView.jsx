@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Activity, MapPin, Pencil, Plus, RefreshCw, Search, Upload } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Activity, LocateFixed, MapPin, Pencil, Plus, Radar, RefreshCw, Search, Upload } from "lucide-react";
 
 import { API, api } from "../../api.js";
 import { AnprBadge, GeocodeBadge, LiveBadge } from "../../components/Badge.jsx";
 import { useToast } from "../../components/Toast.jsx";
-import { isDepartmentAdmin, isSuperAdmin, useAuth } from "../../context/AuthContext.jsx";
+import { canAccessDepartment, isDepartmentAdmin, isSuperAdmin, useAuth } from "../../context/AuthContext.jsx";
 import { useCameras } from "../../context/CamerasContext.jsx";
 import { useDepartments } from "../../context/DepartmentsContext.jsx";
 import { usePageTitle } from "../../hooks/usePageTitle.js";
@@ -24,6 +25,8 @@ export default function CameraListView() {
   const [live, setLive] = useState("");
   const [editing, setEditing] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState(null);
+  const navigate = useNavigate();
   const showToast = useToast();
 
   const rows = cameras.filter((c) => {
@@ -85,6 +88,46 @@ export default function CameraListView() {
     if (live) params.set("is_live", live);
     params.set("format", format);
     window.location.assign(`${API}/cameras/export?${params.toString()}`);
+  }
+
+  // Both run for one camera and need only operator clearance on its
+  // department (pipeline.py); the whole-registry variants stay super-admin.
+  const canOperate = (c) => canAccessDepartment(user, c.department, "operator");
+
+  async function probe(c) {
+    setBusy(`probe:${c.camera_id}`);
+    try {
+      const result = await api(`/probe?camera_id=${encodeURIComponent(c.camera_id)}`, { method: "POST" });
+      const row = result.results?.[0];
+      showToast(
+        row?.transport_ok && row.transport_ok !== "none"
+          ? `${c.name}: reachable over ${row.transport_ok}${row.width ? ` · ${row.width}×${row.height}` : ""}`
+          : `${c.name}: probe failed — ${row?.error ?? "no transport reachable"}`,
+      );
+      await refresh();
+    } catch (err) {
+      showToast("Probe failed: " + err.message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function regeocode(c) {
+    setBusy(`geo:${c.camera_id}`);
+    try {
+      const result = await api(`/geocode?camera_id=${encodeURIComponent(c.camera_id)}&force=true`, { method: "POST" });
+      const row = result.results?.[0];
+      showToast(
+        row?.latitude != null
+          ? `${c.name}: located (${row.geocode_confidence}) at ${row.latitude.toFixed(5)}, ${row.longitude.toFixed(5)}`
+          : `${c.name}: its location text could not be geocoded`,
+      );
+      await refresh();
+    } catch (err) {
+      showToast("Geocode failed: " + err.message);
+    } finally {
+      setBusy(null);
+    }
   }
 
   function canEdit(c) {
@@ -229,9 +272,10 @@ export default function CameraListView() {
                     className="registry-icon-btn"
                     title="Health"
                     aria-label={`Health ${c.name}`}
-                    onClick={() => {
-                      window.location.assign(`/registry/health-history`);
-                    }}
+                    // In-app navigation onto this camera -- this was a full page
+                    // load that dropped every live player and opened Health with
+                    // nothing selected.
+                    onClick={() => navigate(`/registry/health-history?camera=${encodeURIComponent(c.camera_id)}`)}
                   >
                     <Activity size={15} strokeWidth={2} />
                   </button>
@@ -240,12 +284,34 @@ export default function CameraListView() {
                     className="registry-icon-btn"
                     title="Map"
                     aria-label={`Map ${c.name}`}
-                    onClick={() => {
-                      window.location.assign(`/registry/map`);
-                    }}
+                    onClick={() => navigate("/registry/map")}
                   >
                     <MapPin size={15} strokeWidth={2} />
                   </button>
+                  {canOperate(c) && (
+                    <>
+                      <button
+                        type="button"
+                        className="registry-icon-btn"
+                        title="Probe stream now"
+                        aria-label={`Probe ${c.name} now`}
+                        disabled={busy === `probe:${c.camera_id}`}
+                        onClick={() => probe(c)}
+                      >
+                        <Radar size={15} strokeWidth={2} />
+                      </button>
+                      <button
+                        type="button"
+                        className="registry-icon-btn"
+                        title="Re-geocode from location"
+                        aria-label={`Re-geocode ${c.name} from its location text`}
+                        disabled={busy === `geo:${c.camera_id}`}
+                        onClick={() => regeocode(c)}
+                      >
+                        <LocateFixed size={15} strokeWidth={2} />
+                      </button>
+                    </>
+                  )}
                   {canEdit(c) && (
                     <button
                       type="button"

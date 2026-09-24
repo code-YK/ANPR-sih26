@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../../api.js";
 import LocationPicker from "../../components/LocationPicker.jsx";
+import { useConfirm } from "../../components/ConfirmDialog.jsx";
 import Modal from "../../components/Modal.jsx";
 import { useToast } from "../../components/Toast.jsx";
 import { isSuperAdmin, useAuth } from "../../context/AuthContext.jsx";
@@ -19,6 +20,7 @@ export default function EditCameraModal({ camera, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const showToast = useToast();
+  const [confirm, confirmDialog] = useConfirm();
   const { user } = useAuth();
   const { names: departments } = useDepartments();
 
@@ -76,8 +78,13 @@ export default function EditCameraModal({ camera, onClose, onSaved }) {
   }
 
   async function handleDelete() {
-    if (!window.confirm(`Delete camera "${camera.name}" (${camera.camera_id})? This only works if it has no ` +
-      "sightings, alerts, or analytics history on record.")) return;
+    const ok = await confirm({
+      title: `Delete camera "${camera.name}"?`,
+      body: `${camera.camera_id} is removed from the registry. This only works if it has no sightings, alerts, or analytics history on record.`,
+      confirmLabel: "Delete camera",
+      danger: true,
+    });
+    if (!ok) return;
     setDeleting(true);
     try {
       await api(`/cameras/${camera.camera_id}`, { method: "DELETE" });
@@ -253,6 +260,7 @@ export default function EditCameraModal({ camera, onClose, onSaved }) {
           </form>
         </>
       )}
+      {confirmDialog}
     </Modal>
   );
 }

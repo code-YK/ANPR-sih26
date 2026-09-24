@@ -1,30 +1,17 @@
 import { createContext, useCallback, useContext, useRef, useState } from "react";
 
-import { api } from "../api.js";
-import { useToast } from "../components/Toast.jsx";
+import { api, evidenceUrl } from "../api.js";
+import { notify } from "../lib/notifications.js";
 import { usePolling } from "../hooks/usePolling.js";
 
 const AlertsCtx = createContext(null);
 
 const POLL_MS = 4000;
 
-function beep() {
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    const ctx = new AudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.frequency.value = 880;
-    gain.gain.setValueAtTime(0.2, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.3);
-  } catch (_) {
-    // Audio blocked (autoplay policy) or unavailable -- toast + nav badge
-    // still carry the alert, the beep is a nice-to-have on top.
-  }
+/** Same alerts, in the same order, with the same status -- nothing to re-render. */
+function sameAlerts(a, b) {
+  if (a.length !== b.length) return false;
+  return a.every((alert, index) => alert.id === b[index].id && alert.status === b[index].status);
 }
 
 /**
@@ -45,7 +32,6 @@ export function AlertsProvider({ children }) {
   const [lastPolledAt, setLastPolledAt] = useState(null);
   const knownIds = useRef(new Set());
   const firstLoad = useRef(true);
-  const showToast = useToast();
 
   const load = useCallback(async () => {
     let alerts;
@@ -60,21 +46,42 @@ export function AlertsProvider({ children }) {
 
     if (!firstLoad.current && newIds.length > 0) {
       setJustArrivedIds(new Set(newIds));
-      const first = alerts.find((a) => a.id === newIds[0]);
-      // A watchlist alert names its plate; a suspicious-activity alert has
-      // none, so fall back to its label ("Potentially dangerous person").
-      const subject = first.plate ?? first.label ?? "alert";
-      showToast(
-        newIds.length === 1
-          ? `Alert: ${subject} on camera ${first.camera_id}`
-          : `${newIds.length} new alerts, most recent: ${subject} on camera ${first.camera_id}`
-      );
-      beep();
+      // One card per alert, oldest first so the newest lands nearest the
+      // corner; the stack keeps three and counts the rest, and the sound is
+      // rate-limited, so a burst stays readable. Whatever was open before this
+      // session's first poll counts as already seen.
+      const fresh = alerts.filter((a) => newIds.includes(a.id)).reverse();
+      for (const alert of fresh) {
+        const suspicious = alert.alert_type === "suspicious";
+        notify({
+          kind: suspicious ? "suspicious" : "watchlist",
+          key: `alert:${alert.id}`,
+          replaces: alert.sighting_id != null ? `sighting:${alert.sighting_id}` : undefined,
+          cameraId: alert.camera_id,
+          cameraName: alert.camera_name ?? alert.camera_id,
+          // A suspicious-activity alert has no plate; what it says is in label.
+          plate: suspicious ? undefined : alert.plate,
+          title: suspicious ? alert.label ?? "Potentially dangerous person" : "Watchlist match",
+          detail: suspicious
+            ? `Severity ${alert.severity ?? "high"}${alert.match_confidence != null ? ` · ${alert.match_confidence.toFixed(2)}` : ""}`
+            : [alert.reason_code && alert.reason_code.replace(/_/g, " "), alert.severity && `${alert.severity} severity`]
+                .filter(Boolean)
+                .join(" · "),
+          time: alert.event_time,
+          image: alert.has_evidence && alert.sighting_id != null ? evidenceUrl(alert.sighting_id) : null,
+          href: `/live/${encodeURIComponent(alert.camera_id)}?ai=${suspicious ? "suspicious" : "anpr"}`,
+        });
+      }
     }
     firstLoad.current = false;
     alerts.forEach((a) => knownIds.current.add(a.id));
-    setOpenAlerts(alerts);
-  }, [showToast]);
+    // Replace the array only when the queue actually changed. Setting a fresh
+    // array every tick re-rendered every consumer of this context -- the status
+    // strip, the nav badge, the alerts table -- four times a minute while
+    // nothing had happened, which is a real cost on a view already carrying
+    // live video.
+    setOpenAlerts((prev) => (sameAlerts(prev, alerts) ? prev : alerts));
+  }, []);
 
   usePolling(load, POLL_MS);
 

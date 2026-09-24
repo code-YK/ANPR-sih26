@@ -1,11 +1,12 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Download, MapPinOff, Search } from "lucide-react";
+import { MapPinOff, Search } from "lucide-react";
 
 import { api } from "../../api.js";
+import ExportMenu from "../../components/ExportMenu.jsx";
+import PlateChip from "../../components/PlateChip.jsx";
 import RouteMap from "../../components/RouteMap.jsx";
 import { usePageTitle } from "../../hooks/usePageTitle.js";
-import { plateGroups } from "../../lib/plate.js";
 
 function fmtDateTime(iso) {
   if (!iso) return "—";
@@ -45,64 +46,9 @@ function humanize(value) {
   return String(value).replace(/_/g, " ");
 }
 
-function toCsv(journey) {
-  const header = [
-    "seq",
-    "seen_at",
-    "camera_id",
-    "camera_name",
-    "location_text",
-    "department",
-    "confidence",
-    "vehicle_type",
-    "latitude",
-    "longitude",
-  ];
-  const rows = journey.stops.map((s, i) => [
-    i + 1,
-    s.seen_at,
-    s.camera_id,
-    s.camera_name,
-    s.location_text,
-    s.department ?? "",
-    s.confidence ?? "",
-    s.vehicle_type ?? "",
-    s.latitude ?? "",
-    s.longitude ?? "",
-  ]);
-  return [header, ...rows]
-    .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
-    .join("\n");
-}
-
-function downloadCsv(journey) {
-  const blob = new Blob([toCsv(journey)], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `journey-${journey.plate}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 function PlateTitle({ plate }) {
   if (!plate) return null;
-  const tentative = String(plate).endsWith("?");
-  return (
-    <span
-      className={tentative ? "alerts-plate-chip alerts-plate-chip--tentative journey-plate-title" : "alerts-plate-chip journey-plate-title"}
-      aria-label={`Plate ${String(plate).replace("?", "")}`}
-    >
-      <span className="alerts-plate-chip-stripe" aria-hidden="true">
-        IND
-      </span>
-      <span className="alerts-plate-chip-text" aria-hidden="true">
-        {plateGroups(plate).map((group, index) => (
-          <span key={index}>{group}</span>
-        ))}
-      </span>
-    </span>
-  );
+  return <PlateChip plate={plate} className="journey-plate-title" />;
 }
 
 export default function JourneyView() {
@@ -196,10 +142,10 @@ export default function JourneyView() {
           </p>
         </div>
         {hasResults && (
-          <button type="button" className="secondary journey-export-btn" onClick={() => downloadCsv(journey)}>
-            <Download size={15} strokeWidth={2} />
-            Export
-          </button>
+          // The backend's own export, in all four formats it serves. This was a
+          // CSV assembled here in the browser -- a second implementation that
+          // could drift from the one the API and the other formats share.
+          <ExportMenu path={`/vehicles/${encodeURIComponent(journey.plate)}/journey/export`} />
         )}
       </header>
 
